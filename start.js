@@ -18,4 +18,13 @@ try {
 if (process.env.PORT) port = process.env.PORT;
 
 console.log(`Starting OpenClaw Office on port ${port}...`);
-execSync(`npx next start -p ${port} -H ${host}`, { stdio: 'inherit' });
+
+// If standalone build exists (Docker/production), use it directly
+const standalonePath = '.next/standalone/server.js';
+if (existsSync(standalonePath)) {
+  process.env.PORT = String(port);
+  process.env.HOSTNAME = host;
+  execSync(`node ${standalonePath}`, { stdio: 'inherit', env: { ...process.env, PORT: String(port), HOSTNAME: host } });
+} else {
+  execSync(`npx next start -p ${port} -H ${host}`, { stdio: 'inherit' });
+}

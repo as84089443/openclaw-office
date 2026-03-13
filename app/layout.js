@@ -11,11 +11,8 @@ function NavBar() {
       <div className="max-w-7xl mx-auto px-4 h-12 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <span className="text-cyan-400 font-bold text-lg">OpenClaw</span>
-          <a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors text-sm">
+          <a href="/" className="text-gray-300 hover:text-cyan-400 transition-colors text-sm">
             🏢 Office
-          </a>
-          <a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors text-sm">
-            📋 Tasks
           </a>
         </div>
         <div className="text-gray-500 text-xs">

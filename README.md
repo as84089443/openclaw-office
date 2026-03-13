@@ -18,29 +18,33 @@ It gives your AI agents a virtual office where you can watch them work in real-t
 ## Quick Start
 
 ```bash
-npx openclaw-office init
-```
-
-Follow the interactive wizard to:
-1. Connect to your OpenClaw gateway
-2. Discover your agents
-3. Choose your office style
-4. Generate your custom office scene
-5. Start the dashboard
-
-## Manual Setup
-
-```bash
 git clone https://github.com/wickedapp/openclaw-office
 cd openclaw-office
 npm install
-cp .env.example .env.local        # Edit with your values
+cp .env.example .env.local
 cp openclaw-office.config.example.json openclaw-office.config.json
 npm run build
 npm start
 ```
 
 The dashboard runs on [http://localhost:4200](http://localhost:4200) by default.
+
+> **No OpenClaw gateway yet?** That's fine — the dashboard works in standalone mode. You'll see the full UI with empty data. Connect a gateway later to see live agent activity.
+
+### Interactive Setup (CLI Wizard)
+
+If you have an OpenClaw gateway running, the CLI wizard can auto-discover your agents:
+
+```bash
+node cli/index.js init
+```
+
+This will:
+1. Connect to your OpenClaw gateway
+2. Discover your agents
+3. Choose your office style
+4. Generate your custom office scene
+5. Start the dashboard
 
 ## Configuration
 
@@ -86,13 +90,17 @@ The dashboard runs on [http://localhost:4200](http://localhost:4200) by default.
 
 ### Environment Variables
 
-| Variable | Description |
-|---|---|
-| `OPENCLAW_GATEWAY_URL` | Gateway WebSocket URL (overrides config) |
-| `OPENCLAW_GATEWAY_TOKEN` | Gateway auth token (overrides config) |
-| `GEMINI_API_KEY` | Google Gemini API key for image generation |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for notifications |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID for notifications |
+All environment variables are **optional**. The dashboard works without any of them.
+
+| Variable | Required | Description |
+|---|---|---|
+| `OPENCLAW_GATEWAY_URL` | No | Gateway WebSocket URL (overrides config) |
+| `OPENCLAW_GATEWAY_TOKEN` | No | Gateway auth token (overrides config) |
+| `GEMINI_API_KEY` | No | Google Gemini API key for office image generation |
+| `GOOGLE_API_KEY` | No | Alternative to GEMINI_API_KEY |
+| `ANTHROPIC_API_KEY` | No | Claude Vision for auto-detecting desk positions |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for notifications |
+| `TELEGRAM_CHAT_ID` | No | Telegram chat ID for notifications |
 
 ## Features
 

@@ -9,7 +9,11 @@ export async function agentsCommand() {
   }
 
   const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-  const agents = config.agents || [];
+  // agents can be an object {id: {...}} or an array [{...}]
+  const agentsRaw = config.agents || {};
+  const agents = Array.isArray(agentsRaw)
+    ? agentsRaw
+    : Object.entries(agentsRaw).map(([id, data]) => ({ id, ...data }));
 
   console.log();
   console.log(chalk.bold.cyan('  🏢 Configured Agents'));
@@ -22,7 +26,8 @@ export async function agentsCommand() {
     for (const a of agents) {
       const emoji = a.emoji || '🤖';
       const color = a.color || '#6366f1';
-      console.log(`    ${emoji} ${chalk.hex(color).bold(a.name)} — ${chalk.dim(a.role || 'Agent')}`);
+      const id = a.id ? chalk.dim(` (${a.id})`) : '';
+      console.log(`    ${emoji} ${chalk.hex(color).bold(a.name)}${id} — ${chalk.dim(a.role || 'Agent')}`);
     }
   }
   console.log();
