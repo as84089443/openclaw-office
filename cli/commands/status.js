@@ -33,7 +33,7 @@ export async function statusCommand() {
   console.log(`    ${chalk.dim('Agents:')}      ${agentCount} configured`);
   console.log(`    ${chalk.dim('Style:')}       ${config.office?.style || config.style?.theme || 'default'}`);
   console.log(`    ${chalk.dim('Deployment:')}  ${config.deployment?.method || 'manual'}`);
-  console.log(`    ${chalk.dim('Port:')}        ${config.deployment?.port || 4200}`);
+  console.log(`    ${chalk.dim('Port:')}        ${process.env.PORT || config.deployment?.port || 4200}`);
   console.log();
 
   // Test gateway connection

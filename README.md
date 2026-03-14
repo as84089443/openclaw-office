@@ -29,6 +29,11 @@ npm start
 
 The dashboard runs on [http://localhost:4200](http://localhost:4200) by default.
 
+To use a custom port:
+```bash
+PORT=4201 npm start
+```
+
 > **No OpenClaw gateway yet?** That's fine — the dashboard works in standalone mode. You'll see the full UI with empty data. Connect a gateway later to see live agent activity.
 
 ### Interactive Setup (CLI Wizard)
@@ -37,6 +42,11 @@ If you have an OpenClaw gateway running, the CLI wizard can auto-discover your a
 
 ```bash
 node cli/index.js init
+```
+
+For automated/CI setups (skips interactive prompts):
+```bash
+node cli/index.js init --non-interactive
 ```
 
 This will:
@@ -54,7 +64,7 @@ This will:
 {
   "office": {
     "name": "My AI Office",
-    "style": "cyberpunk"           // Style theme for image generation
+    "style": "cyberpunk"           // cyberpunk | minimalist | cozy | corporate
   },
   "gateway": {
     "url": "ws://127.0.0.1:18789", // OpenClaw gateway WebSocket URL
@@ -110,8 +120,8 @@ Watch tasks flow between agents with animated mail envelopes. Multi-step delegat
 ### Dynamic Agent Detection
 The dashboard periodically checks your OpenClaw gateway for agent changes. When new agents appear or existing ones are removed, you'll get a notification with options to update your config and regenerate the office image.
 
-### AI-Generated Office Scenes
-Use Google Gemini or other providers to generate custom isometric office scenes. Claude Vision auto-detects desk positions for accurate agent placement.
+### AI-Generated Office Scenes (Optional)
+Use Google Gemini or other providers to generate custom isometric office scenes. Claude Vision auto-detects desk positions for accurate agent placement. **This is entirely optional** — the dashboard includes a default office scene that works without any API keys.
 
 ### Cost & Activity Tracking
 SQLite-backed activity logging with token usage tracking, cost calculations, and productivity stats.
