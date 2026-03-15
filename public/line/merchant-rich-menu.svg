@@ -1,54 +1,112 @@
 <svg width="2500" height="1686" viewBox="0 0 2500 1686" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="180" y1="120" x2="2320" y2="1560" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#07121C"/>
-      <stop offset="0.5" stop-color="#17112A"/>
-      <stop offset="1" stop-color="#1A0D18"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="2500" y2="1686" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#081925"/>
+      <stop offset="0.58" stop-color="#121B2D"/>
+      <stop offset="1" stop-color="#1B1420"/>
     </linearGradient>
-    <linearGradient id="stroke" x1="0" y1="0" x2="2500" y2="1686" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#00F5FF"/>
-      <stop offset="0.5" stop-color="#39FF14"/>
-      <stop offset="1" stop-color="#FFB703"/>
+    <radialGradient id="glowCyan" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(420 220) rotate(15) scale(780 450)">
+      <stop stop-color="#00E8FF" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#00E8FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowAmber" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(2220 1460) rotate(-22) scale(820 480)">
+      <stop stop-color="#FFB84A" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FFB84A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="headerStroke" x1="110" y1="70" x2="2390" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#36F2FF"/>
+      <stop offset="0.5" stop-color="#7DFE5B"/>
+      <stop offset="1" stop-color="#FFB84A"/>
     </linearGradient>
   </defs>
 
   <rect width="2500" height="1686" rx="84" fill="url(#bg)"/>
-  <rect x="66" y="66" width="2368" height="1554" rx="54" stroke="url(#stroke)" stroke-width="4" stroke-opacity="0.6"/>
+  <rect width="2500" height="1686" rx="84" fill="url(#glowCyan)"/>
+  <rect width="2500" height="1686" rx="84" fill="url(#glowAmber)"/>
+  <rect x="58" y="58" width="2384" height="1570" rx="54" stroke="white" stroke-opacity="0.18" stroke-width="2"/>
 
-  <g opacity="0.35">
-    <path d="M120 320H2380" stroke="#00F5FF" stroke-opacity="0.22" stroke-width="2"/>
-    <path d="M120 860H2380" stroke="#00F5FF" stroke-opacity="0.22" stroke-width="2"/>
-    <path d="M1250 180V1506" stroke="#00F5FF" stroke-opacity="0.22" stroke-width="2"/>
-  </g>
+  <rect x="110" y="72" width="2280" height="150" rx="36" fill="#0A1C29" fill-opacity="0.86" stroke="url(#headerStroke)" stroke-opacity="0.8" stroke-width="3"/>
+  <text x="168" y="155" fill="#F3FCFF" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="64" font-weight="700">BW-Copilot 商家中心</text>
+  <text x="2082" y="154" fill="#A6B8C5" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="40" font-weight="500" text-anchor="end">LINE 一鍵入口</text>
 
-  <text x="170" y="200" fill="#00F5FF" font-family="JetBrains Mono, monospace" font-size="56" font-weight="700">Merchant Copilot</text>
-  <text x="170" y="260" fill="#C0D5DF" font-family="JetBrains Mono, monospace" font-size="28">單一官方 LINE 入口 / Rich Menu Preview</text>
-
-  <g>
-    <rect x="120" y="360" width="1080" height="430" rx="44" fill="#00F5FF" fill-opacity="0.08" stroke="#00F5FF" stroke-opacity="0.42" stroke-width="3"/>
-    <text x="190" y="470" fill="#00F5FF" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">待審核</text>
-    <text x="190" y="560" fill="#E5F7FA" font-family="JetBrains Mono, monospace" font-size="34">推播審核、延期、跳過</text>
+  <g opacity="0.26">
+    <path d="M120 905H2380" stroke="#D7F8FF" stroke-width="2"/>
+    <path d="M1250 264V1560" stroke="#D7F8FF" stroke-width="2"/>
   </g>
 
   <g>
-    <rect x="1300" y="360" width="1080" height="430" rx="44" fill="#39FF14" fill-opacity="0.08" stroke="#39FF14" stroke-opacity="0.42" stroke-width="3"/>
-    <text x="1370" y="470" fill="#39FF14" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">顧客資訊</text>
-    <text x="1370" y="560" fill="#EEFAEA" font-family="JetBrains Mono, monospace" font-size="34">標籤、備註、最近互動</text>
+    <rect x="120" y="264" width="1110" height="640" rx="52" fill="#0D2736" fill-opacity="0.72" stroke="#35EEFF" stroke-opacity="0.62" stroke-width="4"/>
+    <circle cx="290" cy="424" r="68" fill="#0B3548"/>
+    <path d="M252 423L281 453L331 396" stroke="#41F5FF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="392" y="448" fill="#EFFFFF" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="84" font-weight="700">待審核</text>
+    <text x="392" y="520" fill="#9DC2CF" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="38" font-weight="500">同意 / 延後 / 跳過</text>
+    <rect x="196" y="588" width="430" height="170" rx="26" fill="#123648" stroke="#3AEFFF" stroke-opacity="0.5"/>
+    <rect x="220" y="620" width="248" height="22" rx="11" fill="#74F8FF" fill-opacity="0.72"/>
+    <rect x="220" y="660" width="190" height="18" rx="9" fill="#74F8FF" fill-opacity="0.4"/>
+    <rect x="482" y="620" width="120" height="58" rx="16" fill="#2DE5F6" fill-opacity="0.82"/>
+    <text x="541" y="658" fill="#022738" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">OK</text>
+    <circle cx="914" cy="670" r="108" fill="#12384A"/>
+    <path d="M860 670H968" stroke="#3AF0FF" stroke-width="18" stroke-linecap="round"/>
+    <path d="M914 616V724" stroke="#3AF0FF" stroke-width="18" stroke-linecap="round"/>
   </g>
 
   <g>
-    <rect x="120" y="900" width="1080" height="430" rx="44" fill="#FFB703" fill-opacity="0.08" stroke="#FFB703" stroke-opacity="0.42" stroke-width="3"/>
-    <text x="190" y="1010" fill="#FFB703" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">店家設定</text>
-    <text x="190" y="1100" fill="#FFF4D1" font-family="JetBrains Mono, monospace" font-size="34">品牌語氣、渠道健康、缺資料提醒</text>
+    <rect x="1270" y="264" width="1110" height="640" rx="52" fill="#142A1F" fill-opacity="0.72" stroke="#8AFF52" stroke-opacity="0.6" stroke-width="4"/>
+    <circle cx="1440" cy="424" r="68" fill="#22402B"/>
+    <circle cx="1422" cy="410" r="16" fill="#B8FF98"/>
+    <rect x="1450" y="399" width="24" height="44" rx="12" fill="#B8FF98"/>
+    <text x="1542" y="448" fill="#F4FFF1" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="84" font-weight="700">顧客資訊</text>
+    <text x="1542" y="520" fill="#B9D2BE" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="38" font-weight="500">標籤 / 備註 / 最近互動</text>
+    <rect x="1338" y="592" width="420" height="182" rx="26" fill="#1D3A2A" stroke="#8AFF52" stroke-opacity="0.42"/>
+    <circle cx="1402" cy="652" r="28" fill="#B0FF8A"/>
+    <rect x="1442" y="632" width="266" height="20" rx="10" fill="#B0FF8A" fill-opacity="0.76"/>
+    <rect x="1442" y="668" width="190" height="16" rx="8" fill="#B0FF8A" fill-opacity="0.4"/>
+    <rect x="1442" y="698" width="128" height="42" rx="12" fill="#79F65A" fill-opacity="0.92"/>
+    <text x="1506" y="728" fill="#17331F" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="middle">TAG</text>
+    <g>
+      <rect x="1874" y="602" width="360" height="168" rx="24" fill="#1D402A"/>
+      <path d="M1918 668L1980 624L2042 668" stroke="#AFFF92" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1980 624V734" stroke="#AFFF92" stroke-width="14" stroke-linecap="round"/>
+      <rect x="2066" y="626" width="124" height="30" rx="15" fill="#98FF6F"/>
+      <rect x="2066" y="674" width="92" height="22" rx="11" fill="#98FF6F" fill-opacity="0.6"/>
+    </g>
   </g>
 
   <g>
-    <rect x="1300" y="900" width="1080" height="430" rx="44" fill="#FF6B35" fill-opacity="0.08" stroke="#FF6B35" stroke-opacity="0.42" stroke-width="3"/>
-    <text x="1370" y="1010" fill="#FF6B35" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">本週摘要</text>
-    <text x="1370" y="1100" fill="#FFE0D5" font-family="JetBrains Mono, monospace" font-size="34">3-5 個指標與下週建議</text>
+    <rect x="120" y="920" width="1110" height="640" rx="52" fill="#352611" fill-opacity="0.74" stroke="#FFBE43" stroke-opacity="0.62" stroke-width="4"/>
+    <circle cx="290" cy="1080" r="68" fill="#4D3515"/>
+    <circle cx="290" cy="1080" r="34" fill="none" stroke="#FFD170" stroke-width="12"/>
+    <path d="M290 1034V1006M290 1154V1126M246 1080H218M362 1080H334M322 1048L344 1026M258 1112L236 1134M258 1048L236 1026M322 1112L344 1134" stroke="#FFD170" stroke-width="10" stroke-linecap="round"/>
+    <text x="392" y="1104" fill="#FFF8E8" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="84" font-weight="700">店家設定</text>
+    <text x="392" y="1176" fill="#E0C8A1" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="38" font-weight="500">營業時間 / 新品 / 品牌語氣</text>
+    <rect x="196" y="1238" width="468" height="210" rx="26" fill="#483316" stroke="#FFBE43" stroke-opacity="0.42"/>
+    <rect x="224" y="1274" width="212" height="22" rx="11" fill="#FFD170" fill-opacity="0.75"/>
+    <rect x="224" y="1312" width="306" height="18" rx="9" fill="#FFD170" fill-opacity="0.42"/>
+    <rect x="224" y="1344" width="260" height="18" rx="9" fill="#FFD170" fill-opacity="0.42"/>
+    <rect x="224" y="1378" width="146" height="42" rx="12" fill="#FFBB39"/>
+    <text x="298" y="1407" fill="#472A05" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="middle">SAVE</text>
+    <g>
+      <rect x="762" y="1246" width="358" height="196" rx="24" fill="#4A3315"/>
+      <rect x="812" y="1290" width="260" height="102" rx="18" fill="#5B4020" stroke="#FFCF78" stroke-opacity="0.56"/>
+      <rect x="836" y="1322" width="156" height="16" rx="8" fill="#FFCF78" fill-opacity="0.76"/>
+      <circle cx="1038" cy="1330" r="18" fill="#FFC550"/>
+      <rect x="836" y="1360" width="212" height="12" rx="6" fill="#FFCF78" fill-opacity="0.45"/>
+    </g>
   </g>
 
-  <text x="170" y="1506" fill="#8899A6" font-family="JetBrains Mono, monospace" font-size="24">
-    若要同步到 LINE，請將對應 PNG 內容放進 FNB_LINE_RICH_MENU_IMAGE_BASE64，再呼叫 /api/line/rich-menu/sync
-  </text>
+  <g>
+    <rect x="1270" y="920" width="1110" height="640" rx="52" fill="#3A1914" fill-opacity="0.74" stroke="#FF7C44" stroke-opacity="0.62" stroke-width="4"/>
+    <circle cx="1440" cy="1080" r="68" fill="#57251C"/>
+    <path d="M1398 1118L1432 1086L1462 1110L1500 1046" stroke="#FFB18A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1542" y="1104" fill="#FFF2EE" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="84" font-weight="700">本週摘要</text>
+    <text x="1542" y="1176" fill="#E6B8A8" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="38" font-weight="500">重點指標 + 下週建議</text>
+    <rect x="1338" y="1240" width="896" height="208" rx="28" fill="#58271F" stroke="#FF8D5B" stroke-opacity="0.48"/>
+    <rect x="1380" y="1276" width="188" height="136" rx="22" fill="#6A2E24"/>
+    <rect x="1398" y="1338" width="26" height="54" rx="8" fill="#FFA987"/>
+    <rect x="1436" y="1306" width="26" height="86" rx="8" fill="#FFA987"/>
+    <rect x="1474" y="1276" width="26" height="116" rx="8" fill="#FFA987"/>
+    <text x="1660" y="1320" fill="#FFD5C6" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="34" font-weight="600">互動 +18%</text>
+    <text x="1660" y="1370" fill="#FFD5C6" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="34" font-weight="600">領券 +11%</text>
+    <text x="1660" y="1420" fill="#FFD5C6" font-family="PingFang TC, Noto Sans TC, Microsoft JhengHei, sans-serif" font-size="34" font-weight="600">建議：離峰套餐</text>
+  </g>
 </svg>

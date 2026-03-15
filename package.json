@@ -30,6 +30,8 @@
     "superfish:prepare-env": "node scripts/superfish-prepare-env.mjs",
     "superfish:rich-menu": "node scripts/superfish-rich-menu.mjs --write-env",
     "superfish:liff": "node scripts/superfish-create-liff.mjs",
+    "superfish:live-check": "node scripts/superfish-live-check.mjs",
+    "superfish:go-live": "npm run superfish:live-check && npm run superfish:webhook && npm run superfish:sync-rich-menu && npm run superfish:live-check",
     "superfish:sync-rich-menu": "node scripts/superfish-sync-rich-menu.mjs",
     "superfish:webhook": "node scripts/superfish-configure-line-webhook.mjs",
     "test:discord-reports": "node --test tests/discord-report-prompts.test.mjs tests/fish-input-snapshot.test.mjs && node ../scripts/validate-discord-report-prompts.mjs",

@@ -53,6 +53,19 @@ npm warn deprecated eslint@8.57.1
 ### `3 vulnerabilities` on npm install
 **Harmless for local use.** These are from dev dependencies and don't affect the running dashboard.
 
+## LINE Go-Live Efficiency
+
+### Playwright 點擊流程太慢
+LINE 上線流程不要先用 Playwright 逐步點擊。優先改用：
+
+```bash
+npm run superfish:live-check
+npm run superfish:webhook
+npm run superfish:sync-rich-menu
+```
+
+最後只保留手機 OA 的人眼驗證（`Rich menu -> LIFF -> callback -> merchant tab`）。
+
 ## Interactive Wizard
 
 ### `ExitPromptError: User force closed the prompt`

@@ -23,13 +23,15 @@ npm run demo
 ```bash
 npm run demo
 npm run migrate:fnb
+npm run superfish:live-check
+npm run superfish:go-live
 npm run superfish:webhook
 npm run superfish:sync-rich-menu
 npm run test:fnb
 npm run build
 ```
 
-E2E（Playwright）：
+E2E（Playwright，僅回歸或 UI 除錯）：
 
 ```bash
 npm run test:e2e
@@ -55,9 +57,15 @@ npm run test:e2e:report
 ## LINE 商家入口流程
 
 1. 設定 Render env 與 `FNB_PUBLIC_BASE_URL`（正式網址）。
-2. `npm run superfish:webhook` 設定 LINE webhook。
-3. `npm run superfish:sync-rich-menu` 同步四格 rich menu。
-4. 從 OA 測試：`Rich menu -> LIFF -> callback -> /merchant`。
+2. `npm run superfish:go-live`（快檢 + webhook + rich menu sync + 再快檢）。
+3. 從 OA 測試：`Rich menu -> LIFF -> callback -> /merchant`。
+
+## 最快驗證流程（不靠 Playwright）
+
+1. `npm run superfish:live-check`：檢查 `/api/health` readiness（line/login/liff/richMenu）與 LINE Login redirect。
+2. `npm run superfish:webhook`：把 webhook endpoint 寫回 LINE channel 並做 test。
+3. `npm run superfish:sync-rich-menu`：同步四格 rich menu 到 OA。
+4. 僅保留「手機 OA 人眼驗證」：`Rich menu -> LIFF -> callback -> merchant tab`。
 
 ## API（節錄）
 
