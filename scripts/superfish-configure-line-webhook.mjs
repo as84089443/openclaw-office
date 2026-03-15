@@ -19,6 +19,26 @@ async function lineApi(path, accessToken, options = {}) {
   })
 }
 
+async function resolveWebhookEndpoint(baseUrl) {
+  const candidates = ['/api/line/webhook', '/api/webhooks/line']
+  for (const path of candidates) {
+    const endpoint = `${baseUrl}${path}`
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      if (response.status !== 404) {
+        return endpoint
+      }
+    } catch {
+      // Ignore probe failures and continue with next candidate.
+    }
+  }
+  return `${baseUrl}/api/line/webhook`
+}
+
 async function main() {
   const envMap = await readEnvMap()
   const baseUrl = resolveBaseUrl(envMap)
@@ -29,7 +49,7 @@ async function main() {
   const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN
     || envMap.LINE_CHANNEL_ACCESS_TOKEN
     || requireEnvValue('FNB_LINE_CHANNEL_ACCESS_TOKEN', envMap)
-  const endpoint = `${baseUrl}/api/line/webhook`
+  const endpoint = await resolveWebhookEndpoint(baseUrl)
 
   await lineApi('/v2/bot/channel/webhook/endpoint', accessToken, {
     method: 'PUT',
