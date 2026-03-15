@@ -1,5 +1,6 @@
 import {
   decodeMerchantSession,
+  getDefaultLocationId,
   getMerchantHome,
   getMerchantSessionCookieName,
   getServiceStatus,
@@ -18,6 +19,7 @@ export async function GET(request) {
     const lineUserId = merchantSession?.lineUserId || null
 
     if (!lineUserId) {
+      const defaultLocationId = await getDefaultLocationId()
       if (!status.lineLoginConfigured && process.env.FNB_DEMO_MODE !== '1') {
         return Response.json({
           ok: false,
@@ -25,10 +27,18 @@ export async function GET(request) {
           error: '商家專用 LINE 入口尚未設定。請改填 LINE_LOGIN_* 與 NEXT_PUBLIC_LINE_LIFF_ID。',
         }, { status: 503 })
       }
+      if (!defaultLocationId) {
+        return Response.json({
+          ok: false,
+          needsOnboarding: true,
+          onboardingUrl: '/ops',
+          error: '尚未建立店家據點，請先完成 onboarding 再綁定 LINE。',
+        }, { status: 409 })
+      }
       return Response.json({
         ok: false,
         needsBinding: true,
-        bindUrl: `/api/auth/line/start?redirectTo=${encodeURIComponent('/merchant')}`,
+        bindUrl: `/api/auth/line/start?locationId=${encodeURIComponent(defaultLocationId)}&redirectTo=${encodeURIComponent('/merchant')}`,
       }, { status: 401 })
     }
 
@@ -50,10 +60,19 @@ export async function GET(request) {
       }, { status: 403 })
     }
     if (String(error.message || '').includes('LINE operator is not bound')) {
+      const defaultLocationId = await getDefaultLocationId()
+      if (!defaultLocationId) {
+        return Response.json({
+          ok: false,
+          needsOnboarding: true,
+          onboardingUrl: '/ops',
+          error: '尚未建立店家據點，請先完成 onboarding 再綁定 LINE。',
+        }, { status: 409 })
+      }
       return Response.json({
         ok: false,
         needsBinding: true,
-        bindUrl: `/api/auth/line/start?redirectTo=${encodeURIComponent('/merchant')}`,
+        bindUrl: `/api/auth/line/start?locationId=${encodeURIComponent(defaultLocationId)}&redirectTo=${encodeURIComponent('/merchant')}`,
       }, { status: 401 })
     }
     return Response.json({

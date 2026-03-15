@@ -317,3 +317,15 @@ test('line auth callback uri allowlist accepts normalized callback uri only', { 
     }
   }
 })
+
+test('line auth url requires existing merchant location in non-demo mode', { concurrency: false }, async () => {
+  await configureProvider('sqlite', { demoMode: false })
+  process.env.LINE_LOGIN_CHANNEL_ID = 'test-line-login-channel'
+  process.env.LINE_LOGIN_CHANNEL_SECRET = 'test-line-login-secret'
+  await service.resetFnbServiceForTests()
+
+  await assert.rejects(
+    () => service.createLineAuthUrl({ origin: 'https://copilot.bw-space.com' }),
+    /No merchant location is available for LINE login/,
+  )
+})

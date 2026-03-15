@@ -9,6 +9,13 @@ import {
   issueMerchantSession,
 } from '../../../../../lib/fnb-service.js'
 
+function buildOnboardingRedirect(statePayload, requestOrigin) {
+  const redirectUrl = new URL(statePayload?.redirectTo || '/merchant', getPublicBaseUrl(requestOrigin))
+  redirectUrl.searchParams.set('line', 'needs-onboarding')
+  redirectUrl.searchParams.set('reason', 'missing-location')
+  return redirectUrl
+}
+
 export async function GET(request) {
   const url = new URL(request.url)
   const state = url.searchParams.get('state')
@@ -29,6 +36,11 @@ export async function GET(request) {
       ok: false,
       error: 'LINE OAuth callback redirect URI mismatch',
     }, { status: 400 })
+  }
+  if (!statePayload.locationId) {
+    const response = NextResponse.redirect(buildOnboardingRedirect(statePayload, url.origin))
+    response.cookies.delete(stateCookieName)
+    return response
   }
 
   try {
@@ -56,6 +68,11 @@ export async function GET(request) {
     })
     return response
   } catch (error) {
+    if (String(error.message || '').includes('No merchant location is available')) {
+      const response = NextResponse.redirect(buildOnboardingRedirect(statePayload, url.origin))
+      response.cookies.delete(stateCookieName)
+      return response
+    }
     return Response.json({
       ok: false,
       error: error.message,

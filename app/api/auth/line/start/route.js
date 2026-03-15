@@ -14,12 +14,29 @@ function resolveInput(request, body = null) {
   }
 }
 
+function normalizeRedirectTo(value) {
+  const candidate = String(value || '').trim()
+  if (!candidate.startsWith('/') || candidate.startsWith('//')) return '/merchant'
+  return candidate
+}
+
+function buildOnboardingUrl(origin, redirectTo) {
+  const url = new URL(normalizeRedirectTo(redirectTo), origin)
+  url.searchParams.set('line', 'needs-onboarding')
+  url.searchParams.set('reason', 'missing-location')
+  return url
+}
+
 export async function GET(request) {
   try {
     const input = resolveInput(request)
+    const resolvedLocationId = input.locationId || await getDefaultLocationId()
+    if (!resolvedLocationId) {
+      return NextResponse.redirect(buildOnboardingUrl(input.origin, input.redirectTo))
+    }
     const auth = await createLineAuthUrl({
       ...input,
-      locationId: input.locationId || await getDefaultLocationId(),
+      locationId: resolvedLocationId,
     })
     const response = NextResponse.redirect(auth.url)
     response.cookies.set(getLineOAuthCookieName(), auth.stateNonce, {
@@ -42,9 +59,19 @@ export async function POST(request) {
   try {
     const body = await request.json()
     const input = resolveInput(request, body)
+    const resolvedLocationId = input.locationId || await getDefaultLocationId()
+    if (!resolvedLocationId) {
+      return Response.json({
+        ok: false,
+        needsOnboarding: true,
+        reason: 'missing-location',
+        onboardingUrl: '/ops',
+        error: 'No merchant location is available. Complete onboarding first.',
+      }, { status: 409 })
+    }
     const auth = await createLineAuthUrl({
       ...input,
-      locationId: input.locationId || await getDefaultLocationId(),
+      locationId: resolvedLocationId,
     })
     return Response.json({
       ok: true,

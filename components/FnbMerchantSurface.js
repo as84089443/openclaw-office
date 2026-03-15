@@ -155,6 +155,7 @@ export default function FnbMerchantSurface() {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [bindUrl, setBindUrl] = useState('')
+  const [onboardingUrl, setOnboardingUrl] = useState('')
   const [liffState, setLiffState] = useState({ ready: false, profile: null, requiresLogin: false })
   const [customerQuery, setCustomerQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
@@ -203,12 +204,21 @@ export default function FnbMerchantSurface() {
       if (!response.ok || !data.ok) {
         if (data.merchantLineConfigured === false) {
           setBindUrl('')
+          setOnboardingUrl('')
           setHome(null)
           setError(data.error || '商家專用 LINE 入口尚未設定')
           return
         }
+        if (data.needsOnboarding) {
+          setBindUrl('')
+          setOnboardingUrl(data.onboardingUrl || '/ops')
+          setHome(null)
+          setError(data.error || '尚未建立店家據點，請先完成 onboarding。')
+          return
+        }
         if (data.needsBinding) {
           setBindUrl(data.bindUrl)
+          setOnboardingUrl('')
           setHome(null)
           setError('')
           return
@@ -219,6 +229,7 @@ export default function FnbMerchantSurface() {
       setHome(data.home)
       setActiveTab(nextTab)
       setBindUrl('')
+      setOnboardingUrl('')
       setError('')
       updateUrl(nextTab, data.home?.activeMembership?.location?.id || nextLocationId)
     } catch (fetchError) {
@@ -376,6 +387,32 @@ export default function FnbMerchantSurface() {
               className="inline-flex items-center gap-2 rounded-2xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-200"
             >
               <span>用 LINE 綁定商家身份</span>
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  if (!home && onboardingUrl) {
+    return (
+      <main className="mx-auto max-w-md px-4 py-8">
+        <div className="glass-card rounded-[28px] p-6">
+          <div className="flex items-center gap-2 text-sm text-amber-300">
+            <Store className="h-4 w-4" />
+            <span>先完成店家 onboarding</span>
+          </div>
+          <h1 className="mt-3 font-display text-3xl text-white">還沒有可綁定的店家據點</h1>
+          <p className="mt-3 text-sm leading-7 text-gray-300">
+            請先建立商家與分店資料，再回到 LINE 入口完成身份綁定。
+          </p>
+          <div className="mt-6">
+            <a
+              href={onboardingUrl}
+              className="inline-flex items-center gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-200"
+            >
+              <span>前往 onboarding</span>
               <ExternalLink className="h-4 w-4" />
             </a>
           </div>
