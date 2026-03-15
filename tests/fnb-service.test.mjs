@@ -255,3 +255,65 @@ test('attribution sourceKey deduplicates repeated events', { concurrency: false 
   assert.equal(second.duplicated, true)
   assert.equal(first.id, second.id)
 })
+
+test('line auth callback uri stays normalized when public base url has trailing slash', { concurrency: false }, async () => {
+  await configureProvider('sqlite')
+  const originalBaseUrl = process.env.FNB_PUBLIC_BASE_URL
+  const originalLineLoginChannelId = process.env.LINE_LOGIN_CHANNEL_ID
+  const originalLineLoginChannelSecret = process.env.LINE_LOGIN_CHANNEL_SECRET
+  process.env.FNB_PUBLIC_BASE_URL = 'https://copilot.bw-space.com/'
+  process.env.LINE_LOGIN_CHANNEL_ID = 'test-line-login-channel'
+  process.env.LINE_LOGIN_CHANNEL_SECRET = 'test-line-login-secret'
+
+  try {
+    const auth = await service.createLineAuthUrl({ origin: 'https://copilot.bw-space.com' })
+    const statePayload = service.decodeLineAuthState(auth.state)
+    assert.equal(auth.redirectUri, 'https://copilot.bw-space.com/api/auth/line/callback')
+    assert.equal(statePayload.redirectUri, 'https://copilot.bw-space.com/api/auth/line/callback')
+  } finally {
+    if (originalBaseUrl === undefined) {
+      delete process.env.FNB_PUBLIC_BASE_URL
+    } else {
+      process.env.FNB_PUBLIC_BASE_URL = originalBaseUrl
+    }
+    if (originalLineLoginChannelId === undefined) {
+      delete process.env.LINE_LOGIN_CHANNEL_ID
+    } else {
+      process.env.LINE_LOGIN_CHANNEL_ID = originalLineLoginChannelId
+    }
+    if (originalLineLoginChannelSecret === undefined) {
+      delete process.env.LINE_LOGIN_CHANNEL_SECRET
+    } else {
+      process.env.LINE_LOGIN_CHANNEL_SECRET = originalLineLoginChannelSecret
+    }
+  }
+})
+
+test('line auth callback uri allowlist accepts normalized callback uri only', { concurrency: false }, async () => {
+  await configureProvider('sqlite')
+  const originalBaseUrl = process.env.FNB_PUBLIC_BASE_URL
+  process.env.FNB_PUBLIC_BASE_URL = 'https://copilot.bw-space.com/'
+
+  try {
+    assert.equal(
+      service.isAllowedLineAuthCallbackUri(
+        'https://copilot.bw-space.com//api/auth/line/callback',
+        'https://copilot.bw-space.com',
+      ),
+      true,
+    )
+    assert.equal(
+      service.isAllowedLineAuthCallbackUri(
+        'https://evil.example.com/api/auth/line/callback',
+        'https://copilot.bw-space.com',
+      ),
+      false,
+    )
+  } finally {
+    if (originalBaseUrl === undefined) {
+      delete process.env.FNB_PUBLIC_BASE_URL
+    } else {
+      process.env.FNB_PUBLIC_BASE_URL = originalBaseUrl
+    }
+  }
+})

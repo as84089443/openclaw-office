@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import {
   completeLineAuth,
   decodeLineAuthState,
+  getPublicBaseUrl,
   getLineOAuthCookieName,
+  isAllowedLineAuthCallbackUri,
   getMerchantSessionCookieName,
   issueMerchantSession,
 } from '../../../../../lib/fnb-service.js'
@@ -15,7 +17,6 @@ export async function GET(request) {
   const sessionCookieName = getMerchantSessionCookieName()
   const cookieStateNonce = request.cookies.get(stateCookieName)?.value
   const statePayload = decodeLineAuthState(state)
-  const expectedRedirectUri = `${url.origin}/api/auth/line/callback`
 
   if (!code || !statePayload || !cookieStateNonce || statePayload.stateNonce !== cookieStateNonce) {
     return Response.json({
@@ -23,7 +24,7 @@ export async function GET(request) {
       error: 'Invalid LINE OAuth state',
     }, { status: 400 })
   }
-  if (statePayload.redirectUri !== expectedRedirectUri) {
+  if (!isAllowedLineAuthCallbackUri(statePayload.redirectUri, url.origin)) {
     return Response.json({
       ok: false,
       error: 'LINE OAuth callback redirect URI mismatch',
@@ -38,7 +39,7 @@ export async function GET(request) {
       expectedNonce: statePayload.nonce,
     })
 
-    const redirectUrl = new URL(statePayload.redirectTo || '/merchant', url.origin)
+    const redirectUrl = new URL(statePayload.redirectTo || '/merchant', getPublicBaseUrl(url.origin))
     redirectUrl.searchParams.set('line', 'connected')
     const response = NextResponse.redirect(redirectUrl)
     response.cookies.delete(stateCookieName)
