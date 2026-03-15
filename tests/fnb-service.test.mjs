@@ -329,3 +329,21 @@ test('line auth url requires existing merchant location in non-demo mode', { con
     /No merchant location is available for LINE login/,
   )
 })
+
+test('google warning is suppressed when google oauth is not configured', { concurrency: false }, async () => {
+  await configureProvider('sqlite', { demoMode: false })
+
+  const onboarding = await service.onboardMerchant({
+    tenantName: 'No Google Pilot',
+    locationName: 'No Google 店',
+    ownerName: '店長',
+    menuItems: [{ id: 'a', name: '套餐 A', category: '主食', priceCents: 12000, isSignature: true }],
+  })
+
+  const snapshot = await service.getOpsSnapshot(onboarding.locationId)
+  const channelNames = snapshot.channels.map((channel) => channel.channel)
+  const googleWarnings = snapshot.alerts.filter((alert) => String(alert.message).includes('google-business-profile'))
+
+  assert.equal(channelNames.includes('google-business-profile'), false)
+  assert.equal(googleWarnings.length, 0)
+})
