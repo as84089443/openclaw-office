@@ -28,8 +28,14 @@ export async function POST(request) {
     const adapter = getLineMessagingAdapter()
     const manifestPath = join(process.cwd(), 'lib', 'fnb', 'merchant-rich-menu.json')
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    let payload = {}
+    try {
+      payload = await request.json()
+    } catch {}
     const imageBase64Path = process.env.FNB_LINE_RICH_MENU_IMAGE_BASE64_PATH || null
-    let imageBase64 = process.env.LINE_RICH_MENU_IMAGE_BASE64 || process.env.FNB_LINE_RICH_MENU_IMAGE_BASE64 || null
+    let imageBase64 = typeof payload?.imageBase64 === 'string'
+      ? payload.imageBase64.trim()
+      : (process.env.LINE_RICH_MENU_IMAGE_BASE64 || process.env.FNB_LINE_RICH_MENU_IMAGE_BASE64 || null)
 
     if (!imageBase64 && imageBase64Path) {
       const resolvedImagePath = isAbsolute(imageBase64Path)
@@ -66,6 +72,8 @@ export async function POST(request) {
         ? 'env.LINE_RICH_MENU_IMAGE_BASE64'
         : process.env.FNB_LINE_RICH_MENU_IMAGE_BASE64
           ? 'env.FNB_LINE_RICH_MENU_IMAGE_BASE64'
+        : typeof payload?.imageBase64 === 'string' && payload.imageBase64.trim()
+          ? 'request.imageBase64'
         : imageBase64Path
           ? `file:${imageBase64Path}`
           : 'missing',
