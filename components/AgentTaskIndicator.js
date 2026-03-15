@@ -24,8 +24,8 @@ const STATE_DISPLAY = {
 // Floating task card above agent
 // Mobile: compact label with state + agent name
 // Desktop: full task detail card
-export function TaskCard({ task, position, agentId }) {
-  const agent = AGENT_INFO[agentId]
+export function TaskCard({ task, position, agentId, agent }) {
+  const resolvedAgent = agent || AGENT_INFO[agentId] || { name: agentId, color: '#888', emoji: '🤖' }
   const taskState = task.state || 'in_progress'
   const display = STATE_DISPLAY[taskState] || STATE_DISPLAY.in_progress
   const taskText = task.detail || task.title || 'Working on task...'
@@ -49,8 +49,8 @@ export function TaskCard({ task, position, agentId }) {
         className="hidden sm:block rounded-lg p-3 min-w-[180px] max-w-[280px]"
         style={{
           background: 'rgba(10, 10, 26, 0.95)',
-          border: `2px solid ${agent.color}`,
-          boxShadow: `0 0 20px ${agent.color}40`,
+          border: `2px solid ${resolvedAgent.color}`,
+          boxShadow: `0 0 20px ${resolvedAgent.color}40`,
         }}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -61,7 +61,7 @@ export function TaskCard({ task, position, agentId }) {
           >
             {display.icon}
           </motion.span>
-          <span className="text-xs font-bold" style={{ color: agent.color }}>
+          <span className="text-xs font-bold" style={{ color: resolvedAgent.color }}>
             {display.label}
           </span>
         </div>
@@ -75,7 +75,7 @@ export function TaskCard({ task, position, agentId }) {
             <motion.div
               key={i}
               className="w-1.5 h-1.5 rounded-full"
-              style={{ background: agent.color }}
+              style={{ background: resolvedAgent.color }}
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 1, repeat: Infinity, delay: i * 0.3 }}
             />
@@ -88,8 +88,8 @@ export function TaskCard({ task, position, agentId }) {
         className="w-3 h-3 rotate-45 mx-auto -mt-1.5"
         style={{ 
           background: 'rgba(10, 10, 26, 0.95)',
-          borderRight: `2px solid ${agent.color}`,
-          borderBottom: `2px solid ${agent.color}`,
+          borderRight: `2px solid ${resolvedAgent.color}`,
+          borderBottom: `2px solid ${resolvedAgent.color}`,
         }}
       />
     </motion.div>
@@ -154,21 +154,20 @@ export function QueueBadge({ count, position, color }) {
 }
 
 // Combined agent status overlay — shows for any active state
-export default function AgentTaskIndicator({ agentId, task, queueCount = 0, position, glowOnly = false }) {
-  const agent = AGENT_INFO[agentId]
-  if (!agent) return null
+export default function AgentTaskIndicator({ agentId, agent, task, queueCount = 0, position, glowOnly = false }) {
+  const resolvedAgent = agent || AGENT_INFO[agentId] || { name: agentId, color: '#888', emoji: '🤖' }
   
   const isActive = task && ['received', 'analyzing', 'task_created', 'assigned', 'in_progress'].includes(task.state)
   
   return (
     <AnimatePresence>
       {isActive && (
-        <BusyGlow key={`glow-${agentId}`} position={position} color={agent.color} />
+        <BusyGlow key={`glow-${agentId}`} position={position} color={resolvedAgent.color} />
       )}
       {!glowOnly && isActive && (
-        <TaskCard key={`task-${agentId}`} task={task} position={position} agentId={agentId} />
+        <TaskCard key={`task-${agentId}`} task={task} position={position} agentId={agentId} agent={resolvedAgent} />
       )}
-      <QueueBadge key={`queue-${agentId}`} count={queueCount} position={position} color={agent.color} />
+      <QueueBadge key={`queue-${agentId}`} count={queueCount} position={position} color={resolvedAgent.color} />
     </AnimatePresence>
   )
 }

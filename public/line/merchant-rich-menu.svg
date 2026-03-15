@@ -1,0 +1,54 @@
+<svg width="2500" height="1686" viewBox="0 0 2500 1686" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="120" x2="2320" y2="1560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07121C"/>
+      <stop offset="0.5" stop-color="#17112A"/>
+      <stop offset="1" stop-color="#1A0D18"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="0" y1="0" x2="2500" y2="1686" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00F5FF"/>
+      <stop offset="0.5" stop-color="#39FF14"/>
+      <stop offset="1" stop-color="#FFB703"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="2500" height="1686" rx="84" fill="url(#bg)"/>
+  <rect x="66" y="66" width="2368" height="1554" rx="54" stroke="url(#stroke)" stroke-width="4" stroke-opacity="0.6"/>
+
+  <g opacity="0.35">
+    <path d="M120 320H2380" stroke="#00F5FF" stroke-opacity="0.22" stroke-width="2"/>
+    <path d="M120 860H2380" stroke="#00F5FF" stroke-opacity="0.22" stroke-width="2"/>
+    <path d="M1250 180V1506" stroke="#00F5FF" stroke-opacity="0.22" stroke-width="2"/>
+  </g>
+
+  <text x="170" y="200" fill="#00F5FF" font-family="JetBrains Mono, monospace" font-size="56" font-weight="700">Merchant Copilot</text>
+  <text x="170" y="260" fill="#C0D5DF" font-family="JetBrains Mono, monospace" font-size="28">單一官方 LINE 入口 / Rich Menu Preview</text>
+
+  <g>
+    <rect x="120" y="360" width="1080" height="430" rx="44" fill="#00F5FF" fill-opacity="0.08" stroke="#00F5FF" stroke-opacity="0.42" stroke-width="3"/>
+    <text x="190" y="470" fill="#00F5FF" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">待審核</text>
+    <text x="190" y="560" fill="#E5F7FA" font-family="JetBrains Mono, monospace" font-size="34">推播審核、延期、跳過</text>
+  </g>
+
+  <g>
+    <rect x="1300" y="360" width="1080" height="430" rx="44" fill="#39FF14" fill-opacity="0.08" stroke="#39FF14" stroke-opacity="0.42" stroke-width="3"/>
+    <text x="1370" y="470" fill="#39FF14" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">顧客資訊</text>
+    <text x="1370" y="560" fill="#EEFAEA" font-family="JetBrains Mono, monospace" font-size="34">標籤、備註、最近互動</text>
+  </g>
+
+  <g>
+    <rect x="120" y="900" width="1080" height="430" rx="44" fill="#FFB703" fill-opacity="0.08" stroke="#FFB703" stroke-opacity="0.42" stroke-width="3"/>
+    <text x="190" y="1010" fill="#FFB703" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">店家設定</text>
+    <text x="190" y="1100" fill="#FFF4D1" font-family="JetBrains Mono, monospace" font-size="34">品牌語氣、渠道健康、缺資料提醒</text>
+  </g>
+
+  <g>
+    <rect x="1300" y="900" width="1080" height="430" rx="44" fill="#FF6B35" fill-opacity="0.08" stroke="#FF6B35" stroke-opacity="0.42" stroke-width="3"/>
+    <text x="1370" y="1010" fill="#FF6B35" font-family="JetBrains Mono, monospace" font-size="70" font-weight="700">本週摘要</text>
+    <text x="1370" y="1100" fill="#FFE0D5" font-family="JetBrains Mono, monospace" font-size="34">3-5 個指標與下週建議</text>
+  </g>
+
+  <text x="170" y="1506" fill="#8899A6" font-family="JetBrains Mono, monospace" font-size="24">
+    若要同步到 LINE，請將對應 PNG 內容放進 FNB_LINE_RICH_MENU_IMAGE_BASE64，再呼叫 /api/line/rich-menu/sync
+  </text>
+</svg>

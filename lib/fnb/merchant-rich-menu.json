@@ -1,0 +1,30 @@
+{
+  "name": "BW-Copilot",
+  "chatBarText": "商家工作台",
+  "size": {
+    "width": 2500,
+    "height": 1686
+  },
+  "areas": [
+    {
+      "tab": "approvals",
+      "label": "待審核",
+      "bounds": { "x": 0, "y": 0, "width": 1250, "height": 843 }
+    },
+    {
+      "tab": "customers",
+      "label": "顧客資訊",
+      "bounds": { "x": 1250, "y": 0, "width": 1250, "height": 843 }
+    },
+    {
+      "tab": "settings",
+      "label": "店家設定",
+      "bounds": { "x": 0, "y": 843, "width": 1250, "height": 843 }
+    },
+    {
+      "tab": "digest",
+      "label": "本週摘要",
+      "bounds": { "x": 1250, "y": 843, "width": 1250, "height": 843 }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import { startCommand } from './commands/start.js';
 import { statusCommand } from './commands/status.js';
 import { agentsCommand } from './commands/agents.js';
 import { generateCommand } from './commands/generate.js';
+import { demoCommand } from './commands/demo.js';
 
 const program = new Command();
 
@@ -14,6 +15,11 @@ program
   .name('openclaw-office')
   .description('Virtual AI Office Dashboard for OpenClaw')
   .version('0.1.0');
+
+program
+  .command('demo')
+  .description('Bootstrap and start the F&B Copilot demo')
+  .action(demoCommand);
 
 program
   .command('init')

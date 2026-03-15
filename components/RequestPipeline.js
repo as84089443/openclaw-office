@@ -15,21 +15,15 @@ const STATES = [
 
 const STATE_INDEX = Object.fromEntries(STATES.map((s, i) => [s.id, i]))
 
+function resolveAgent(agentMap, aliases, agentId) {
+  const resolvedId = aliases?.[agentId] || agentId
+  return resolvedId ? agentMap?.[resolvedId] || null : null
+}
+
 // Single request card in the pipeline
-function RequestCard({ request, isLatest }) {
+function RequestCard({ request, isLatest, agentMap, agentAliases }) {
   const currentStateIdx = STATE_INDEX[request.state] ?? 0
-  const agent = request.assignedTo
-  
-  const AGENT_INFO = {
-    wickedman: { name: 'WickedMan', color: '#ff006e', emoji: '😈' },
-    py: { name: 'PY', color: '#00f5ff', emoji: '🥃' },
-    vigil: { name: 'Vigil', color: '#ff0040', emoji: '🛡️' },
-    quill: { name: 'Quill', color: '#ffd700', emoji: '✍️' },
-    savy: { name: 'Savy', color: '#9d4edd', emoji: '📋' },
-    gantt: { name: 'Gantt', color: '#00d9a5', emoji: '📊' },
-  }
-  
-  const agentInfo = agent ? AGENT_INFO[agent] : null
+  const agentInfo = request.assignedTo ? resolveAgent(agentMap, agentAliases, request.assignedTo) : null
 
   return (
     <motion.div
@@ -118,7 +112,23 @@ export default function RequestPipeline({ onRequestUpdate }) {
   const streamedRequests = useRequestStream()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [visibleCount, setVisibleCount] = useState(6)
+  const [agentMap, setAgentMap] = useState({})
+  const [agentAliases, setAgentAliases] = useState({})
   const containerRef = useRef(null)
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then((r) => r.json())
+      .then((data) => {
+        const map = {}
+        for (const agent of (data.agents || [])) {
+          map[agent.id] = agent
+        }
+        setAgentMap(map)
+        setAgentAliases(data.agentAliases || {})
+      })
+      .catch(() => {})
+  }, [])
 
   // Forward latest request to parent
   useEffect(() => {
@@ -276,6 +286,8 @@ export default function RequestPipeline({ onRequestUpdate }) {
                       key={req.id} 
                       request={req} 
                       isLatest={idx === 0}
+                      agentMap={agentMap}
+                      agentAliases={agentAliases}
                     />
                   ))}
                 </AnimatePresence>

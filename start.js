@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Reads port from openclaw-office.config.json and starts Next.js
 import { readFileSync, existsSync } from 'fs';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { join } from 'path';
 
 let port = 4200;
 let host = '0.0.0.0';
@@ -18,4 +19,5 @@ try {
 if (process.env.PORT) port = process.env.PORT;
 
 console.log(`Starting OpenClaw Office on port ${port}...`);
-execSync(`npx next start -p ${port} -H ${host}`, { stdio: 'inherit' });
+const nextBin = join(process.cwd(), 'node_modules', 'next', 'dist', 'bin', 'next');
+execFileSync(process.execPath, [nextBin, 'start', '-p', String(port), '-H', host], { stdio: 'inherit' });

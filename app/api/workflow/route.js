@@ -32,6 +32,7 @@ import {
   completeAllActiveTasks,
 } from '../../../lib/db'
 import { eventBus, EVENTS } from '../../../lib/event-bus'
+import { recordAttentionTaskFeedback } from '../../../lib/boss-inbox.js'
 
 function timeStr() {
   return new Date().toLocaleTimeString('en-US', { 
@@ -91,7 +92,11 @@ function syncRequestStateFromTask(task) {
     failed: 'completed',
   }
   const newState = stateMap[task.status] || task.status
-  const updates = { state: newState, assignedTo: task.assignedAgent }
+  const updates = {
+    state: newState,
+    assignedTo: task.assignedAgent,
+    ...mergeAttentionMeta(task),
+  }
   if (task.status === 'in_progress') updates.workStartedAt = task.startedAt || Date.now()
   if (task.status === 'completed' || task.status === 'failed') {
     updates.completedAt = task.completedAt || Date.now()
@@ -102,6 +107,64 @@ function syncRequestStateFromTask(task) {
 
 function cleanContent(content) {
   return (content || '').replace(/^\[Telegram[^\]]*\]\s*/s, '').replace(/\[message_id:\s*\d+\]\s*$/, '').trim()
+}
+
+function mergeAttentionMeta(...sources) {
+  const meta = {}
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    if (meta.attentionType === undefined && source.attentionType !== undefined) {
+      meta.attentionType = source.attentionType || null
+    }
+    if (meta.priority === undefined && source.priority !== undefined) {
+      const priority = Number(source.priority)
+      meta.priority = Number.isFinite(priority) ? priority : 0
+    }
+    if (meta.needsDecision === undefined && source.needsDecision !== undefined) {
+      meta.needsDecision = Boolean(source.needsDecision)
+    }
+    if (meta.estimatedValue === undefined && source.estimatedValue !== undefined) {
+      const estimatedValue = Number(source.estimatedValue)
+      meta.estimatedValue = Number.isFinite(estimatedValue) ? estimatedValue : null
+    }
+  }
+  return meta
+}
+
+function normalizeCompletionFeedback({ success = true, body = {} } = {}) {
+  const completionValue = Number(body?.completionValue)
+  const rollbackNeeded = body?.rollbackNeeded === undefined ? false : Boolean(body.rollbackNeeded)
+  const didImprove = body?.didImprove === undefined
+    ? Boolean(success && !rollbackNeeded)
+    : Boolean(body.didImprove)
+  return {
+    completionValue: Number.isFinite(completionValue) ? completionValue : null,
+    didImprove,
+    rollbackNeeded,
+  }
+}
+
+function writeCompletionFeedbackToAttention({
+  taskId,
+  requestId,
+  result,
+  completionValue,
+  didImprove,
+  rollbackNeeded,
+}) {
+  try {
+    recordAttentionTaskFeedback({
+      taskId: taskId || null,
+      requestId: requestId || null,
+      taskResult: result || null,
+      completionValue,
+      didImprove,
+      rollbackNeeded,
+      reviewer: 'workflow-api',
+    })
+  } catch (error) {
+    console.error('[workflow] Failed to record attention feedback:', error.message)
+  }
 }
 
 export async function GET(request) {
@@ -145,6 +208,7 @@ export async function POST(request) {
     // ─────────────────────────────────────────────────────────
     if (action === 'start_flow') {
       const { content, from = 'Boss', agent = 'wickedman', messageId, delegatedTo } = body
+      const attentionMeta = mergeAttentionMeta(body, body.task)
       
       if (!content) {
         return Response.json({ error: 'content is required' }, { status: 400 })
@@ -168,7 +232,12 @@ export async function POST(request) {
         req = findByTgMessageId(messageId)
         if (req) {
           adopted = true
-          updateRequest(req.id, { assignedTo: finalAgent, content: content || req.content, chainId })
+          updateRequest(req.id, {
+            assignedTo: finalAgent,
+            content: content || req.content,
+            chainId,
+            ...attentionMeta,
+          })
           if (content) {
             fixPlaceholderEvents(req.id, content)
             createEvent(req.id, 'received', 'wickedman', `📥 Request from ${from}: "${cleanText.slice(0, 60)}${cleanText.length > 60 ? '...' : ''}"`)
@@ -182,7 +251,13 @@ export async function POST(request) {
         if (placeholder && (placeholder.state === 'received' || placeholder.state === 'analyzing')) {
           req = placeholder
           adopted = true
-          updateRequest(placeholder.id, { assignedTo: finalAgent, content: content || placeholder.content, tgMessageId: messageId || null, chainId })
+          updateRequest(placeholder.id, {
+            assignedTo: finalAgent,
+            content: content || placeholder.content,
+            tgMessageId: messageId || null,
+            chainId,
+            ...attentionMeta,
+          })
           if (content) {
             fixPlaceholderEvents(placeholder.id, content)
             createEvent(placeholder.id, 'received', 'wickedman', `📥 Request from Boss: "${cleanText.slice(0, 60)}${cleanText.length > 60 ? '...' : ''}"`)
@@ -202,6 +277,7 @@ export async function POST(request) {
           createdAt: Date.now(),
           tgMessageId: messageId || null,
           chainId,
+          ...attentionMeta,
         })
         incrementMessages('received')
         createEvent(req.id, 'received', 'wickedman', `📥 Request from ${from}: "${cleanText.slice(0, 60)}${cleanText.length > 60 ? '...' : ''}"`)
@@ -220,6 +296,7 @@ export async function POST(request) {
         status: taskStatus,
         createdAt: Date.now(),
         startedAt: taskStartedAt,
+        ...attentionMeta,
       })
 
       // Sync request state from task
@@ -339,13 +416,26 @@ export async function POST(request) {
 
       const completedAt = Date.now()
       const taskTimeMs = task.startedAt ? completedAt - task.startedAt : 5000
+      const feedback = normalizeCompletionFeedback({ success, body })
+      const completionResult = result || (success ? 'Completed' : 'Failed')
       
       updateTask(task.id, {
         status: success ? 'completed' : 'failed',
         completedAt,
-        result: result || (success ? 'Completed' : 'Failed'),
+        result: completionResult,
+        completionValue: feedback.completionValue,
+        didImprove: feedback.didImprove,
+        rollbackNeeded: feedback.rollbackNeeded,
       })
       emitTaskUpdate(task.id)
+      writeCompletionFeedbackToAttention({
+        taskId: task.id,
+        requestId: task.requestId,
+        result: completionResult,
+        completionValue: feedback.completionValue,
+        didImprove: feedback.didImprove,
+        rollbackNeeded: feedback.rollbackNeeded,
+      })
 
       const savings = recordTaskCompletion(agent, taskTimeMs)
       incrementMessages('sent')
@@ -407,13 +497,26 @@ export async function POST(request) {
 
       const completedAt = Date.now()
       const taskTimeMs = task.startedAt ? completedAt - task.startedAt : 5000
+      const feedback = normalizeCompletionFeedback({ success, body })
+      const completionResult = result || (success ? 'Completed' : 'Failed')
 
       updateTask(task.id, {
         status: success ? 'completed' : 'failed',
         completedAt,
-        result: result || (success ? 'Completed' : 'Failed'),
+        result: completionResult,
+        completionValue: feedback.completionValue,
+        didImprove: feedback.didImprove,
+        rollbackNeeded: feedback.rollbackNeeded,
       })
       emitTaskUpdate(task.id)
+      writeCompletionFeedbackToAttention({
+        taskId: task.id,
+        requestId: task.requestId,
+        result: completionResult,
+        completionValue: feedback.completionValue,
+        didImprove: feedback.didImprove,
+        rollbackNeeded: feedback.rollbackNeeded,
+      })
 
       const effectiveAgent = agent || task.assignedAgent || 'wickedman'
       const savings = recordTaskCompletion(effectiveAgent, taskTimeMs)
@@ -432,6 +535,7 @@ export async function POST(request) {
     // ─────────────────────────────────────────────────────────
     if (action === 'quick_flow') {
       const { content, from = 'Boss', agent, reason, autoComplete = true, workDurationMs = 5000, tokensInput = 0, tokensOutput = 0, notify = false, notifyDetails = [], messageId } = body
+      const attentionMeta = mergeAttentionMeta(body, body.task)
       
       if (!content || !agent) {
         return Response.json({ error: 'content and agent are required' }, { status: 400 })
@@ -452,7 +556,7 @@ export async function POST(request) {
         req = findByTgMessageId(messageId)
         if (req) {
           webhookAdopted = true
-          updateRequest(req.id, { assignedTo: agent })
+          updateRequest(req.id, { assignedTo: agent, ...attentionMeta })
         }
       }
       
@@ -461,7 +565,7 @@ export async function POST(request) {
         if (pending && (pending.state === 'received' || pending.state === 'analyzing')) {
           req = pending
           webhookAdopted = true
-          updateRequest(req.id, { assignedTo: agent })
+          updateRequest(req.id, { assignedTo: agent, ...attentionMeta })
         }
       }
       
@@ -473,6 +577,7 @@ export async function POST(request) {
           assignedTo: agent,
           task: null,
           createdAt: Date.now(),
+          ...attentionMeta,
         })
         incrementMessages('received')
         createEvent(req.id, 'received', 'wickedman', `📥 Request from ${from}: "${content.slice(0, 60)}${content.length > 60 ? '...' : ''}"`)
@@ -491,6 +596,7 @@ export async function POST(request) {
         assignedAgent: agent,
         status: 'pending',
         createdAt: Date.now(),
+        ...attentionMeta,
       })
       
       const alreadyAnalyzing = webhookAdopted && req.state === 'analyzing'
@@ -552,10 +658,25 @@ export async function POST(request) {
           const t = getTaskById(task.id)
           const completedAt = Date.now()
           const taskTimeMs = t?.startedAt ? completedAt - t.startedAt : workDurationMs
-          updateTask(task.id, { status: 'completed', completedAt })
+          const completionResult = 'Auto completed'
+          updateTask(task.id, {
+            status: 'completed',
+            completedAt,
+            result: completionResult,
+            didImprove: true,
+            rollbackNeeded: false,
+          })
           syncRequestStateFromTask(getTaskById(task.id))
           emitRequestUpdate(requestId)
           emitTaskUpdate(task.id)
+          writeCompletionFeedbackToAttention({
+            taskId: task.id,
+            requestId,
+            result: completionResult,
+            completionValue: null,
+            didImprove: true,
+            rollbackNeeded: false,
+          })
           recordTaskCompletion(agent, taskTimeMs)
           incrementMessages('sent')
           createEvent(requestId, 'completed', agent, `✅ Completed: "${task.title}"`)
@@ -577,6 +698,7 @@ export async function POST(request) {
     // ─────────────────────────────────────────────────────────
     if (action === 'new_request') {
       const { content, from = 'Boss', tokensInput = 0, tokensOutput = 0 } = body
+      const attentionMeta = mergeAttentionMeta(body, body.task)
       
       const req = createRequest({
         id: `req_${Date.now()}`,
@@ -585,6 +707,7 @@ export async function POST(request) {
         assignedTo: null,
         task: null,
         createdAt: Date.now(),
+        ...attentionMeta,
       })
       
       incrementMessages('received')
@@ -606,22 +729,49 @@ export async function POST(request) {
       
       const completedAt = Date.now()
       const taskTimeMs = req.workStartedAt ? completedAt - req.workStartedAt : 5000
+      const feedback = normalizeCompletionFeedback({ success: true, body })
+      const completionResult = result || 'Completed'
       
       // Complete the task if one exists
       const task = getTaskByRequestId(requestId)
       if (task && task.status !== 'completed' && task.status !== 'failed') {
-        updateTask(task.id, { status: 'completed', completedAt, result })
+        updateTask(task.id, {
+          status: 'completed',
+          completedAt,
+          result: completionResult,
+          completionValue: feedback.completionValue,
+          didImprove: feedback.didImprove,
+          rollbackNeeded: feedback.rollbackNeeded,
+        })
         emitTaskUpdate(task.id)
+        writeCompletionFeedbackToAttention({
+          taskId: task.id,
+          requestId,
+          result: completionResult,
+          completionValue: feedback.completionValue,
+          didImprove: feedback.didImprove,
+          rollbackNeeded: feedback.rollbackNeeded,
+        })
+      }
+      if (!task) {
+        writeCompletionFeedbackToAttention({
+          taskId: null,
+          requestId,
+          result: completionResult,
+          completionValue: feedback.completionValue,
+          didImprove: feedback.didImprove,
+          rollbackNeeded: feedback.rollbackNeeded,
+        })
       }
       
-      updateRequest(requestId, { state: 'completed', completedAt, result })
+      updateRequest(requestId, { state: 'completed', completedAt, result: completionResult })
       emitRequestUpdate(requestId)
       
       const savings = recordTaskCompletion(req.assignedTo || 'wickedman', taskTimeMs)
       incrementMessages('sent')
       if (tokensInput > 0 || tokensOutput > 0) addTokens(tokensInput, tokensOutput)
       
-      createEvent(req.id, 'completed', req.assignedTo, `✅ Completed: "${req.task?.title}"`, { result })
+      createEvent(req.id, 'completed', req.assignedTo, `✅ Completed: "${req.task?.title}"`, { result: completionResult })
       
       return Response.json({ success: true, request: getRequestById(requestId), stateConfig: STATE_CONFIG.completed, savings, taskTimeMs })
     }
@@ -639,22 +789,49 @@ export async function POST(request) {
       
       const completedAt = Date.now()
       const taskTimeMs = req.workStartedAt ? completedAt - req.workStartedAt : 5000
+      const feedback = normalizeCompletionFeedback({ success: true, body })
+      const completionResult = result || 'Done'
       
       // Complete associated task
       const task = getTaskByRequestId(requestId)
       if (task && task.status !== 'completed' && task.status !== 'failed') {
-        updateTask(task.id, { status: 'completed', completedAt, result })
+        updateTask(task.id, {
+          status: 'completed',
+          completedAt,
+          result: completionResult,
+          completionValue: feedback.completionValue,
+          didImprove: feedback.didImprove,
+          rollbackNeeded: feedback.rollbackNeeded,
+        })
         emitTaskUpdate(task.id)
+        writeCompletionFeedbackToAttention({
+          taskId: task.id,
+          requestId,
+          result: completionResult,
+          completionValue: feedback.completionValue,
+          didImprove: feedback.didImprove,
+          rollbackNeeded: feedback.rollbackNeeded,
+        })
+      }
+      if (!task) {
+        writeCompletionFeedbackToAttention({
+          taskId: null,
+          requestId,
+          result: completionResult,
+          completionValue: feedback.completionValue,
+          didImprove: feedback.didImprove,
+          rollbackNeeded: feedback.rollbackNeeded,
+        })
       }
       
-      updateRequest(requestId, { state: 'completed', completedAt, result })
+      updateRequest(requestId, { state: 'completed', completedAt, result: completionResult })
       emitRequestUpdate(requestId)
       
       const savings = recordTaskCompletion(req.assignedTo || 'wickedman', taskTimeMs)
       incrementMessages('sent')
       if (tokensInput > 0 || tokensOutput > 0) addTokens(tokensInput, tokensOutput)
       
-      createEvent(req.id, 'completed', req.assignedTo || 'wickedman', `✅ Completed: "${req.task?.title}" - ${result || 'Done'}`)
+      createEvent(req.id, 'completed', req.assignedTo || 'wickedman', `✅ Completed: "${req.task?.title}" - ${completionResult}`)
       
       return Response.json({ success: true, request: getRequestById(requestId), savings, taskTimeMs })
     }
@@ -704,6 +881,7 @@ export async function POST(request) {
       const { requestId, analysis } = body
       const req = getRequestById(requestId)
       if (!req) return Response.json({ error: 'Request not found' }, { status: 404 })
+      const attentionMeta = mergeAttentionMeta(body, analysis)
       const taskData = {
         id: `task_${Date.now()}`,
         title: req.content.slice(0, 50) + (req.content.length > 50 ? '...' : ''),
@@ -721,8 +899,9 @@ export async function POST(request) {
         assignedAgent: analysis.agent,
         status: 'assigned',
         createdAt: Date.now(),
+        ...attentionMeta,
       })
-      updateRequest(requestId, { state: 'task_created', task: taskData })
+      updateRequest(requestId, { state: 'task_created', task: taskData, ...attentionMeta })
       emitRequestUpdate(requestId)
       emitTaskUpdate(task.id)
       createEvent(req.id, 'task_created', 'wickedman', `📋 Task created → ${AGENTS[analysis.agent]?.name || analysis.agent}: ${analysis.reason}`)

@@ -14,11 +14,33 @@
   "scripts": {
     "dev": "next dev -p 4200",
     "build": "next build",
-    "start": "node start.js"
+    "discord-reports:sync": "node ../scripts/sync-discord-report-prompts.mjs",
+    "migrate:fnb": "node scripts/fnb-migrate.mjs",
+    "start": "node start.js",
+    "demo": "node scripts/run-fnb-demo.mjs",
+    "boss-inbox:digest": "node scripts/deliver-boss-inbox-digest.mjs",
+    "evolution:promote": "node scripts/run-memory-distiller-promoter.mjs",
+    "merchant-line:prepare-env": "node scripts/superfish-prepare-env.mjs",
+    "merchant-line:rich-menu": "node scripts/superfish-rich-menu.mjs --write-env",
+    "merchant-line:liff": "node scripts/superfish-create-liff.mjs",
+    "merchant-line:sync-rich-menu": "node scripts/superfish-sync-rich-menu.mjs",
+    "merchant-line:webhook": "node scripts/superfish-configure-line-webhook.mjs",
+    "copilot:install-service": "zsh scripts/install-openclaw-copilot-launchd.sh",
+    "copilot:uninstall-service": "zsh scripts/uninstall-openclaw-copilot-launchd.sh",
+    "superfish:prepare-env": "node scripts/superfish-prepare-env.mjs",
+    "superfish:rich-menu": "node scripts/superfish-rich-menu.mjs --write-env",
+    "superfish:liff": "node scripts/superfish-create-liff.mjs",
+    "superfish:sync-rich-menu": "node scripts/superfish-sync-rich-menu.mjs",
+    "superfish:webhook": "node scripts/superfish-configure-line-webhook.mjs",
+    "test:discord-reports": "node --test tests/discord-report-prompts.test.mjs tests/fish-input-snapshot.test.mjs && node ../scripts/validate-discord-report-prompts.mjs",
+    "test:fnb": "node --test tests/fnb-service.test.mjs",
+    "test:boss-inbox": "node --test tests/boss-inbox.test.mjs",
+    "test:evolution": "node --test tests/evolution-loop.test.mjs"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
-    "eslint-plugin-react": "^7.34.1"
+    "eslint-plugin-react": "^7.34.1",
+    "pg-mem": "^3.0.5"
   },
   "dependencies": {
     "autoprefixer": "^10.4.21",
@@ -30,6 +52,7 @@
     "lucide-react": "^0.474.0",
     "next": "^15.1.6",
     "ora": "^9.3.0",
+    "pg": "^8.16.3",
     "postcss": "^8.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

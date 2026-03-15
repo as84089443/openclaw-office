@@ -1,0 +1,16 @@
+tunnel: openclaw
+credentials-file: /Users/brian/.cloudflared/c0252f3e-43d2-4fb0-9c56-d3d45a12ffa2.json
+protocol: http2
+
+ingress:
+  - hostname: copilot.bw-space.com
+    service: http://localhost:4200
+  - hostname: bws.fun
+    service: http://localhost:3000
+  - hostname: webhook.bw-space.com
+    service: http://localhost:18789
+  - hostname: bws.studio.bw-space.com
+    service: http://localhost:3000
+  - hostname: bws.studio
+    service: http://localhost:3000
+  - service: http_status:404

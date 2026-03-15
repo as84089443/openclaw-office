@@ -1,0 +1,269 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const tempRoot = mkdtempSync(join(tmpdir(), 'openclaw-boss-inbox-'))
+const cronDir = join(tempRoot, 'cron')
+const agentSystemLogsDir = join(tempRoot, 'workspace', 'agent-system', 'logs')
+mkdirSync(cronDir, { recursive: true })
+mkdirSync(agentSystemLogsDir, { recursive: true })
+
+const openclawConfig = {
+  agents: {
+    defaults: {
+      model: {
+        primary: 'openai-codex/gpt-5.4',
+      },
+    },
+    list: [
+      { id: 'main' },
+      { id: 'bizdev', identity: { name: '鯊魚業務', emoji: '🦈' } },
+      { id: 'seo', identity: { name: '藍鯨SEO', emoji: '🐋' } },
+      { id: 'admin', identity: { name: '八爪魚管', emoji: '🐙' } },
+      { id: 'finance-company', identity: { name: '河童帳務', emoji: '🐡' } },
+      { id: 'booking', identity: { name: '水母排程', emoji: '🪼' } },
+      { id: 'crm', identity: { name: '珊瑚CRM', emoji: '🪸' } },
+      { id: 'production', identity: { name: '劍魚後製', emoji: '⚔️' } },
+    ],
+  },
+  bindings: [
+    {
+      agentId: 'main',
+      match: { channel: 'discord', peer: { kind: 'channel', id: 'main-room' } },
+    },
+    {
+      agentId: 'bizdev',
+      match: { channel: 'discord', peer: { kind: 'channel', id: 'sales-room' } },
+    },
+    {
+      agentId: 'finance-company',
+      match: { channel: 'discord', peer: { kind: 'channel', id: 'finance-room' } },
+    },
+  ],
+}
+
+writeFileSync(join(tempRoot, 'openclaw.json'), JSON.stringify(openclawConfig, null, 2))
+writeFileSync(join(cronDir, 'jobs.json'), JSON.stringify({ jobs: [] }, null, 2))
+
+process.env.OPENCLAW_HOME = tempRoot
+process.env.OPENCLAW_CONFIG_PATH = join(tempRoot, 'openclaw.json')
+process.env.OPENCLAW_OFFICE_DB_PATH = join(tempRoot, 'office.db')
+
+const { db, createRequest, createTask, getDailyDigestByDate } = await import('../lib/db.js')
+const { buildBossInboxPayload, ensureDailyDigest, runAttentionAction } = await import('../lib/boss-inbox.js')
+const { getAgentsList, reloadConfig } = await import('../lib/config.js')
+
+reloadConfig()
+
+function resetDb() {
+  db.exec(`
+    DELETE FROM daily_digests;
+    DELETE FROM attention_state;
+    DELETE FROM tasks;
+    DELETE FROM events;
+    DELETE FROM requests;
+  `)
+}
+
+function writeCronJobs(jobs) {
+  writeFileSync(join(cronDir, 'jobs.json'), JSON.stringify({ jobs }, null, 2))
+}
+
+function writeAuditEnv(values = {}) {
+  const defaults = {
+    AUTOMATION_PLACEHOLDER: 0,
+    AUTOMATION_GATED: 0,
+    AUTOMATION_CORE_READY: 8,
+    AUTOMATION_CORE_TOTAL: 8,
+  }
+  const merged = { ...defaults, ...values }
+  const body = Object.entries(merged)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
+  const now = new Date()
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-')
+
+  writeFileSync(
+    join(agentSystemLogsDir, `automation-integrity-${today}.env`),
+    `${body}\n`,
+  )
+}
+
+test.beforeEach(() => {
+  resetDb()
+  writeCronJobs([])
+  writeAuditEnv()
+})
+
+test('boss inbox roster uses canonical openclaw.json agents instead of legacy office list', () => {
+  writeCronJobs([
+    {
+      id: 'bizdev-daily',
+      enabled: true,
+      agentId: 'bizdev',
+      name: 'bizdev-search-daily',
+      payload: { kind: 'agentTurn', message: 'run bizdev' },
+      delivery: { channel: 'discord' },
+    },
+  ])
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const rosterCount = getAgentsList().length
+
+  assert.equal(rosterCount, openclawConfig.agents.list.length)
+  assert.equal(payload.agentSummaries.length, openclawConfig.agents.list.length)
+  assert.ok(payload.agentSummaries.length > 5)
+  assert.ok(payload.activeAgentSummaries.some((entry) => entry.id === 'bizdev'))
+  assert.ok(payload.inactiveAgentSummaries.some((entry) => entry.id === 'seo'))
+  assert.equal(payload.activeAgentSummaries.find((entry) => entry.id === 'bizdev')?.activityState, 'active')
+  assert.equal(payload.inactiveAgentSummaries.find((entry) => entry.id === 'seo')?.activityState, 'inactive')
+})
+
+test('cron failures are surfaced as blocked or risk attention items', () => {
+  writeCronJobs([
+    {
+      id: 'nightly-sync',
+      name: 'Nightly Sync',
+      description: 'Sync accounting exports',
+      enabled: true,
+      agentId: 'finance-company',
+      state: {
+        lastStatus: 'error',
+        consecutiveErrors: 3,
+        lastError: 'Permission denied while syncing invoices',
+        lastRunAtMs: Date.now(),
+      },
+    },
+  ])
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'cron:nightly-sync')
+
+  assert.ok(item)
+  assert.equal(item.attentionType, 'risk')
+  assert.equal(item.agentId, 'finance-company')
+})
+
+test('daily digest is generated as a boss brief and stored with structured sections', () => {
+  const request = createRequest({
+    id: 'req_digest',
+    content: '請今天拍板是否要對重要客戶送出升級方案。',
+    from: 'Boss',
+    state: 'assigned',
+    assignedTo: 'bizdev',
+    attentionType: 'decision',
+    needsDecision: true,
+    priority: 88,
+    estimatedValue: 120000,
+    createdAt: Date.now(),
+  })
+
+  createTask({
+    id: 'task_digest',
+    requestId: request.id,
+    title: '重要客戶升級方案',
+    detail: request.content,
+    assignedAgent: 'bizdev',
+    status: 'assigned',
+    attentionType: 'opportunity',
+    priority: 72,
+    estimatedValue: 120000,
+    createdAt: Date.now(),
+  })
+
+  const digest = ensureDailyDigest({ force: true })
+  const stored = getDailyDigestByDate(digest.date)
+
+  assert.ok(digest.content.includes('老闆晚間摘要'))
+  assert.ok(digest.content.includes('你需要做的事'))
+  assert.ok(stored)
+  assert.equal(stored.date, digest.date)
+  assert.equal(stored.content, digest.content)
+  assert.equal(stored.summary.unresolvedCounts.decision, 1)
+  assert.equal(stored.headline, stored.summary.headline)
+  assert.equal(stored.sections[0].id, 'decision')
+  assert.equal(stored.sections[0].items[0].agentId, 'bizdev')
+  assert.equal(stored.deliveryChannel, 'discord')
+})
+
+test('quiet day digest stays short and excludes legacy KPI rows', () => {
+  const digest = ensureDailyDigest({ force: true })
+
+  assert.equal(digest.quietDay, true)
+  assert.ok(digest.content.includes('今天無待拍板與阻塞'))
+  assert.ok(!digest.content.includes('行程'))
+  assert.ok(!digest.content.includes('真實腳本'))
+  assert.deepEqual(digest.sections, [])
+  assert.ok(['pending', 'not-configured', 'delivered'].includes(digest.deliveryStatus))
+  assert.equal(digest.summary.deliveryStatus, digest.deliveryStatus)
+})
+
+test('technical anomalies only appear when audit or cron failures are present', () => {
+  writeAuditEnv({
+    AUTOMATION_PLACEHOLDER: 2,
+    AUTOMATION_GATED: 1,
+    AUTOMATION_CORE_READY: 6,
+    AUTOMATION_CORE_TOTAL: 8,
+  })
+  writeCronJobs([
+    {
+      id: 'daily-admin-preview',
+      enabled: true,
+      agentId: 'admin',
+      state: {
+        lastStatus: 'error',
+        consecutiveErrors: 1,
+        lastError: 'Preview generation timed out',
+      },
+    },
+  ])
+
+  const digest = ensureDailyDigest({ force: true })
+  const anomalyLabels = digest.anomalies.map((entry) => entry.label)
+
+  assert.equal(digest.quietDay, false)
+  assert.ok(anomalyLabels.includes('假技能'))
+  assert.ok(anomalyLabels.includes('待配置'))
+  assert.ok(anomalyLabels.includes('核心管線'))
+  assert.ok(anomalyLabels.includes('Cron 失敗'))
+  assert.ok(digest.content.includes('系統異常附錄'))
+})
+
+test('attention snooze and owner assignment update governance summary', () => {
+  const request = createRequest({
+    id: 'req_snooze',
+    content: '請先處理 blocked issue',
+    from: 'Boss',
+    state: 'assigned',
+    assignedTo: 'bizdev',
+    attentionType: 'blocked',
+    priority: 90,
+    createdAt: Date.now(),
+  })
+
+  createTask({
+    id: 'task_snooze',
+    requestId: request.id,
+    title: 'Blocked issue',
+    detail: request.content,
+    assignedAgent: 'bizdev',
+    status: 'assigned',
+    attentionType: 'blocked',
+    priority: 90,
+    createdAt: Date.now(),
+  })
+
+  runAttentionAction('req_snooze', { action: 'set_owner', owner: 'admin', reviewer: 'test-suite' })
+  runAttentionAction('req_snooze', { action: 'snooze', snoozeHours: 24, reviewer: 'test-suite' })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'req_snooze')
+  assert.equal(item?.assignedOwner, 'admin')
+  assert.equal(item?.unresolved, false)
+  assert.ok((payload.governanceSummary?.snoozedCount || 0) >= 1)
+})

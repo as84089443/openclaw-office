@@ -3,6 +3,12 @@
     "name": "My AI Office",
     "style": "cyberpunk"
   },
+  "bossInbox": {
+    "discordTarget": "",
+    "deliveryEnabled": true,
+    "immediateTypes": ["blocked", "risk", "opportunity"],
+    "digestHourLocal": 18
+  },
   "gateway": {
     "url": "ws://127.0.0.1:18789",
     "token": "your-gateway-token-here"

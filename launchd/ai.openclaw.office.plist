@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.office</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>WorkingDirectory</key>
+    <string>/Users/brian/.openclaw/openclaw-office</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/brian/.openclaw/openclaw-office/scripts/run-openclaw-office-prod.sh</string>
+    </array>
+    <key>StandardOutPath</key>
+    <string>/Users/brian/.openclaw/logs/openclaw-office.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/brian/.openclaw/logs/openclaw-office.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>HOME</key>
+      <string>/Users/brian</string>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/brian/.local/bin:/Users/brian/.npm-global/bin</string>
+    </dict>
+  </dict>
+</plist>

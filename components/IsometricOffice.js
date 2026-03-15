@@ -6,23 +6,45 @@ import { useRequestStream, useActivityStream } from '../lib/useWorkflowStream'
 import AgentTaskIndicator from './AgentTaskIndicator'
 
 // Default positions — overridden by config via /api/config
-// Auto-generate evenly spaced default positions for any number of agents
-function generateDefaultPositions(agentIds) {
+// Auto-generate a stable multi-row layout for any number of agents.
+function generateDefaultPositions(agentIds, primaryAgentId = null) {
   const positions = {}
-  const layouts = {
-    1: [{ x: 50, y: 45 }],
-    2: [{ x: 35, y: 45 }, { x: 65, y: 45 }],
-    3: [{ x: 50, y: 35 }, { x: 25, y: 60 }, { x: 75, y: 60 }],
-    4: [{ x: 30, y: 35 }, { x: 70, y: 35 }, { x: 30, y: 65 }, { x: 70, y: 65 }],
-    5: [{ x: 50, y: 30 }, { x: 20, y: 45 }, { x: 80, y: 45 }, { x: 30, y: 70 }, { x: 70, y: 70 }],
-    6: [{ x: 30, y: 30 }, { x: 70, y: 30 }, { x: 15, y: 55 }, { x: 50, y: 55 }, { x: 85, y: 55 }, { x: 50, y: 78 }],
-    7: [{ x: 50, y: 28 }, { x: 20, y: 35 }, { x: 80, y: 35 }, { x: 35, y: 55 }, { x: 65, y: 55 }, { x: 22, y: 75 }, { x: 78, y: 75 }],
+
+  if (!Array.isArray(agentIds) || agentIds.length === 0) {
+    return positions
   }
-  const count = agentIds.length
-  const layout = layouts[Math.min(count, 7)] || layouts[7]
-  agentIds.forEach((id, i) => {
-    positions[id] = layout[i % layout.length] || { x: 20 + (i * 15) % 60, y: 30 + (i * 12) % 50 }
-  })
+
+  const ordered = [...agentIds]
+  const hasPrimary = primaryAgentId && ordered.includes(primaryAgentId)
+  if (hasPrimary) {
+    positions[primaryAgentId] = { x: 50, y: 38 }
+  }
+
+  const remaining = ordered.filter((id) => id !== primaryAgentId)
+  if (remaining.length === 0) return positions
+
+  const columns = remaining.length <= 4 ? 2 : remaining.length <= 9 ? 3 : remaining.length <= 16 ? 4 : 5
+  const rows = Math.ceil(remaining.length / columns)
+  const startY = hasPrimary ? 28 : 34
+  const endY = 82
+
+  for (let row = 0; row < rows; row += 1) {
+    const start = row * columns
+    const rowIds = remaining.slice(start, start + columns)
+    const y = rows === 1
+      ? startY
+      : startY + ((endY - startY) * row) / Math.max(rows - 1, 1)
+    const left = rowIds.length === 1 ? 50 : 14
+    const right = rowIds.length === 1 ? 50 : 86
+
+    rowIds.forEach((id, index) => {
+      const x = rowIds.length === 1
+        ? 50
+        : left + ((right - left) * index) / Math.max(rowIds.length - 1, 1)
+      positions[id] = { x, y }
+    })
+  }
+
   return positions
 }
 
@@ -354,6 +376,13 @@ export default function IsometricOffice({ activeRequest }) {
   const [savedAmount, setSavedAmount] = useState(null)
   const [agents, setAgents] = useState([])
   const [officeConfig, setOfficeConfig] = useState(null)
+  const [primaryAgentId, setPrimaryAgentId] = useState('main')
+  const [agentAliases, setAgentAliases] = useState({ wickedman: 'main' })
+
+  const resolveAgentId = useCallback((agentId) => {
+    if (!agentId) return primaryAgentId
+    return agentAliases?.[agentId] || agentId
+  }, [agentAliases, primaryAgentId])
 
   // Client-side only initialization — load config from API
   useEffect(() => {
@@ -365,6 +394,8 @@ export default function IsometricOffice({ activeRequest }) {
       .then(r => r.json())
       .then(config => {
         setOfficeConfig(config)
+        setPrimaryAgentId(config.primaryAgentId || 'main')
+        setAgentAliases(config.agentAliases || {})
         // Build agents array from config (supports both array and object format)
         const rawAgents = config.agents || {}
         const agentList = Array.isArray(rawAgents)
@@ -373,7 +404,10 @@ export default function IsometricOffice({ activeRequest }) {
         setAgents(agentList)
         // Build default positions from config
         // Generate fallback positions for all agents
-        const generatedPositions = generateDefaultPositions(agentList.map(a => a.id))
+        const generatedPositions = generateDefaultPositions(
+          agentList.map(a => a.id),
+          config.primaryAgentId || 'main',
+        )
         const configPositions = { ...generatedPositions }
         for (const a of agentList) {
           if (a.position) configPositions[a.id] = a.position
@@ -440,6 +474,8 @@ export default function IsometricOffice({ activeRequest }) {
   const streamedActivities = useActivityStream()
   const prevRequestStates = useRef({}) // Track previous states to detect transitions
   const processedChainReturns = useRef(new Set()) // Avoid duplicate return animations
+  const animPositions = { external: { x: 10, y: 10 }, ...labelPositions }
+  const agentMap = Object.fromEntries(agents.map((agent) => [agent.id, agent]))
 
   // Listen for chain_return events from activity stream
   useEffect(() => {
@@ -448,9 +484,9 @@ export default function IsometricOffice({ activeRequest }) {
     for (const evt of latestActivities) {
       if (evt.state === 'chain_return' && !processedChainReturns.current.has(evt.id)) {
         processedChainReturns.current.add(evt.id)
-        const fromAgent = evt.agent
-        const toPos = animPositions.wickedman
-        const fromPos = animPositions[fromAgent] || animPositions.wickedman
+        const fromAgent = resolveAgentId(evt.agent)
+        const toPos = animPositions[primaryAgentId] || animPositions.external
+        const fromPos = animPositions[fromAgent] || toPos
         const agentName = evt.agentName || fromAgent
         const emailId = Date.now() + Math.random()
         setReturnEmails(prev => [...prev, { id: emailId, from: fromPos, to: toPos, agentName }])
@@ -458,7 +494,7 @@ export default function IsometricOffice({ activeRequest }) {
         setTimeout(() => processedChainReturns.current.delete(evt.id), 30000)
       }
     }
-  }, [mounted, streamedActivities])
+  }, [animPositions, mounted, primaryAgentId, resolveAgentId, streamedActivities])
   
   useEffect(() => {
     if (!mounted) return
@@ -470,11 +506,11 @@ export default function IsometricOffice({ activeRequest }) {
       // Detect task_created → assigned transition for flying animation
       const prevState = prevRequestStates.current[req.id]
       if (req.state === 'assigned' && prevState && prevState !== 'assigned') {
-        const targetAgent = req.assignedTo || req.task?.targetAgent || 'wickedman'
-        if (targetAgent !== 'wickedman') {
-          // Trigger flying task animation from WickedMan to target agent
-          const from = animPositions.wickedman
-          const to = animPositions[targetAgent] || animPositions.wickedman
+        const targetAgent = resolveAgentId(req.assignedTo || req.task?.targetAgent || primaryAgentId)
+        if (targetAgent !== primaryAgentId) {
+          // Trigger flying task animation from the primary agent to the delegated agent.
+          const from = animPositions[primaryAgentId] || animPositions.external
+          const to = animPositions[targetAgent] || from
           const taskTitle = req.task?.title || req.content?.slice(0, 40) || 'Task'
           const emailId = Date.now() + Math.random()
           setFlyingEmails(prev => [...prev, { id: emailId, from, to, taskTitle }])
@@ -483,33 +519,34 @@ export default function IsometricOffice({ activeRequest }) {
       prevRequestStates.current[req.id] = req.state
       
       if (req.state === 'reviewing') {
-        newWorking['wickedman'] = {
+        newWorking[primaryAgentId] = {
           task: { detail: req.content, title: req.content?.slice(0, 50), state: 'reviewing' },
           startedAt: req.createdAt || Date.now(),
           requestId: req.id,
         }
       } else if (req.state === 'received' || req.state === 'analyzing') {
-        newWorking['wickedman'] = {
+        newWorking[primaryAgentId] = {
           task: { detail: req.content, title: req.content?.slice(0, 50), state: req.state },
           startedAt: req.createdAt || Date.now(),
           requestId: req.id,
         }
       } else if (req.state === 'task_created') {
-        // WickedMan is routing — show on wickedman only
-        newWorking['wickedman'] = {
+        // The primary agent is routing.
+        newWorking[primaryAgentId] = {
           task: { detail: req.content, title: req.content?.slice(0, 50), state: req.state },
           startedAt: req.createdAt || Date.now(),
           requestId: req.id,
         }
       } else if (req.state === 'assigned') {
-        // Mail is flying — show on wickedman (sending), target only gets the flying animation
-        newWorking['wickedman'] = {
+        // Mail is flying — keep the sender active while the delegated agent receives the animation.
+        newWorking[primaryAgentId] = {
           task: { detail: req.content, title: req.content?.slice(0, 50), state: req.state },
           startedAt: req.createdAt || Date.now(),
           requestId: req.id,
         }
       } else if (req.state === 'in_progress' && req.assignedTo) {
-        newWorking[req.assignedTo] = {
+        const assignedAgent = resolveAgentId(req.assignedTo)
+        newWorking[assignedAgent] = {
           task: { ...req.task, detail: req.content, state: 'in_progress' },
           startedAt: req.workStartedAt || Date.now(),
           requestId: req.id,
@@ -524,7 +561,7 @@ export default function IsometricOffice({ activeRequest }) {
     })
     
     setWorkingAgents(newWorking)
-  }, [mounted, streamedRequests])
+  }, [animPositions, mounted, primaryAgentId, resolveAgentId, streamedRequests])
 
   // Handle drag end - calculate new position and save
   const handleDragEnd = useCallback((agentId, info, event) => {
@@ -551,14 +588,13 @@ export default function IsometricOffice({ activeRequest }) {
     setDragKeys(prev => ({ ...prev, [agentId]: (prev[agentId] || 0) + 1 }))
   }, [])
 
-  // Animation positions — derived from label positions (config-driven)
-  const animPositions = { external: { x: 10, y: 10 }, ...labelPositions }
-
   // Trigger task animation
   const triggerTaskAnimation = useCallback((fromAgent, toAgent, taskTitle) => {
     const emailId = Date.now()
-    const from = animPositions[fromAgent] || animPositions.external
-    const to = animPositions[toAgent] || animPositions.wickedman
+    const resolvedFrom = resolveAgentId(fromAgent)
+    const resolvedTo = resolveAgentId(toAgent)
+    const from = animPositions[resolvedFrom] || animPositions.external
+    const to = animPositions[resolvedTo] || animPositions[primaryAgentId] || from
 
     setFlyingEmails(prev => [...prev, { id: emailId, from, to, taskTitle }])
 
@@ -566,7 +602,7 @@ export default function IsometricOffice({ activeRequest }) {
     setTimeout(() => {
       setTaskPopup({ task: { detail: taskTitle }, position: to })
     }, 1000)
-  }, [])
+  }, [animPositions, primaryAgentId, resolveAgentId])
 
   useEffect(() => {
     window.triggerTaskAnimation = triggerTaskAnimation
@@ -593,6 +629,7 @@ export default function IsometricOffice({ activeRequest }) {
         <AgentTaskIndicator
           key={agentId}
           agentId={agentId}
+          agent={agentMap[agentId]}
           task={data.task}
           position={labelPositions[agentId] || defaultPositions[agentId] || { x: 50, y: 50 }}
           glowOnly={true}

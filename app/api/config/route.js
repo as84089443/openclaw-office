@@ -1,20 +1,36 @@
 /**
  * Public config endpoint — strips secrets, exposes agent definitions & office settings
  */
-import { getConfig } from '../../../lib/config.js'
+import {
+  getConfig,
+  getAgentsList,
+  getAgentsMap,
+  getAgentAliases,
+  getPrimaryAgentId,
+  getBossInboxConfig,
+} from '../../../lib/config.js'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const config = getConfig()
-
-  // Build safe public config (no tokens/secrets)
-  // Convert agents object to array with id included
-  const agentsArray = Object.entries(config.agents || {}).map(([id, data]) => ({ id, ...data }))
+  const bossInbox = getBossInboxConfig()
 
   const publicConfig = {
     office: config.office,
-    agents: agentsArray,
-    agentsMap: config.agents,
+    agents: getAgentsList(),
+    agentsMap: getAgentsMap(),
+    agentAliases: getAgentAliases(),
+    primaryAgentId: getPrimaryAgentId(),
     image: config.image,
+    bossInbox: {
+      ...bossInbox,
+      hasDiscordTarget: Boolean(bossInbox.discordTarget),
+    },
+    openclaw: {
+      home: config.openclaw?.home || null,
+      configPath: config.openclaw?.configPath || null,
+    },
   }
 
   return Response.json(publicConfig)

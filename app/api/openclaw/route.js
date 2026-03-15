@@ -33,6 +33,28 @@ function createDashboardEvent(requestId, state, agent, message) {
   return event
 }
 
+function mergeAttentionMeta(...sources) {
+  const meta = {}
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    if (meta.attentionType === undefined && source.attentionType !== undefined) {
+      meta.attentionType = source.attentionType || null
+    }
+    if (meta.priority === undefined && source.priority !== undefined) {
+      const priority = Number(source.priority)
+      meta.priority = Number.isFinite(priority) ? priority : 0
+    }
+    if (meta.needsDecision === undefined && source.needsDecision !== undefined) {
+      meta.needsDecision = Boolean(source.needsDecision)
+    }
+    if (meta.estimatedValue === undefined && source.estimatedValue !== undefined) {
+      const estimatedValue = Number(source.estimatedValue)
+      meta.estimatedValue = Number.isFinite(estimatedValue) ? estimatedValue : null
+    }
+  }
+  return meta
+}
+
 function emitRequestUpdate(requestId) {
   const req = getRequestById(requestId)
   if (req) {
@@ -58,6 +80,7 @@ export async function POST(request) {
     // ─────────────────────────────────────────────────────────
     if (action === 'assign') {
       const { agent, reason, content, messageId, notify = false, notifyDetails = [] } = body
+      const attentionMeta = mergeAttentionMeta(body, body.task)
       
       if (!agent) {
         return Response.json({ error: 'agent is required' }, { status: 400 })
@@ -95,6 +118,7 @@ export async function POST(request) {
           task: null,
           createdAt: Date.now(),
           source: 'api',
+          ...attentionMeta,
         })
         incrementMessages('received')
         createDashboardEvent(req.id, 'received', 'wickedman', `📥 Request received`)
@@ -119,6 +143,7 @@ export async function POST(request) {
         state: 'task_created', 
         task,
         assignedTo: agent,
+        ...attentionMeta,
       })
       
       const agentInfo = AGENTS[agent] || { name: agent, emoji: '🤖' }

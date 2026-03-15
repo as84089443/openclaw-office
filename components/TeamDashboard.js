@@ -56,11 +56,7 @@ function AgentCard({ agent }) {
             >
               {agent.name}
             </h4>
-            <span className="text-lg">
-              {agent.id === 'py' ? '😏' : 
-               agent.id === 'vigil' ? '😤' : 
-               agent.id === 'quill' ? '😊' : '😎'}
-            </span>
+            <span className="text-lg">{agent.emoji || '🤖'}</span>
           </div>
           <p className="text-xs text-gray-500">{agent.role}</p>
         </div>
@@ -91,25 +87,31 @@ function AgentCard({ agent }) {
         <div>
           <div className="text-xs text-gray-500">✅</div>
           <div className="text-sm font-bold text-green-400">
-            {stats.completed}
+            {agent.unresolvedTotal ?? stats.completed}
           </div>
-          <div className="text-[10px] text-gray-600">done</div>
+          <div className="text-[10px] text-gray-600">attention</div>
         </div>
         <div>
-          <div className="text-xs text-gray-500">📝</div>
+          <div className="text-xs text-gray-500">📡</div>
           <div className="text-sm font-bold text-cyan-400">
-            {stats.words}
+            {agent.bindings?.length || 0}
           </div>
-          <div className="text-[10px] text-gray-600">words</div>
+          <div className="text-[10px] text-gray-600">routes</div>
         </div>
         <div>
-          <div className="text-xs text-gray-500">🔢</div>
+          <div className="text-xs text-gray-500">🕒</div>
           <div className="text-sm font-bold text-purple-400">
-            {stats.tokens > 1000 ? `${(stats.tokens / 1000).toFixed(0)}k` : stats.tokens}
+            {agent.lastActive ? new Date(agent.lastActive).toLocaleTimeString() : '—'}
           </div>
-          <div className="text-[10px] text-gray-600">tokens</div>
+          <div className="text-[10px] text-gray-600">active</div>
         </div>
       </div>
+
+      {agent.todaySummary && (
+        <div className="mt-4 rounded-lg bg-white/4 px-3 py-2 text-xs leading-6 text-gray-400">
+          {agent.todaySummary}
+        </div>
+      )}
     </motion.div>
   )
 }
@@ -117,8 +119,15 @@ function AgentCard({ agent }) {
 export default function TeamDashboard() {
   const [agents, setAgents] = useState([])
   useEffect(() => {
-    fetch('/api/config').then(r => r.json()).then(data => {
-      setAgents((data.agents || []).map(enrichAgent))
+    Promise.all([
+      fetch('/api/config').then(r => r.json()),
+      fetch('/api/boss-inbox').then(r => r.json()),
+    ]).then(([config, inbox]) => {
+      const summaryMap = Object.fromEntries((inbox.agentSummaries || []).map((agent) => [agent.id, agent]))
+      setAgents((config.agents || []).map((agent) => enrichAgent({
+        ...agent,
+        ...summaryMap[agent.id],
+      })))
     }).catch(() => {})
   }, [])
 

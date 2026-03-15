@@ -1,0 +1,71 @@
+databases:
+  - name: openclaw-fnb-db
+    databaseName: openclaw_fnb
+    user: openclaw_fnb
+    plan: free
+
+services:
+  - type: web
+    name: openclaw-fnb-copilot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    domains:
+      - copilot.bw-space.com
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FNB_APP_ENV
+        value: staging
+      - key: FNB_DEMO_MODE
+        value: 0
+      - key: PORT
+        value: 4200
+      - key: NEXT_TELEMETRY_DISABLED
+        value: 1
+      - key: OPENCLAW_OFFICE_DISABLE_GATEWAY
+        value: 1
+      - key: DATABASE_URL
+        fromDatabase:
+          name: openclaw-fnb-db
+          property: connectionString
+      - key: FNB_PUBLIC_BASE_URL
+        sync: false
+      - key: FNB_INTERNAL_API_TOKEN
+        sync: false
+      - key: FNB_LINE_BRAND_NAME
+        value: BW-Copilot Merchant
+      - key: NEXT_PUBLIC_LINE_LIFF_ID
+        sync: false
+      - key: NEXT_PUBLIC_FNB_LINE_LIFF_ID
+        sync: false
+      - key: LINE_RICH_MENU_IMAGE_BASE64
+        sync: false
+      - key: FNB_LINE_RICH_MENU_IMAGE_BASE64_PATH
+        value: data/fnb-merchant/merchant-rich-menu.base64.txt
+      - key: LINE_CHANNEL_ID
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_LOGIN_CHANNEL_ID
+        sync: false
+      - key: LINE_LOGIN_CHANNEL_SECRET
+        sync: false
+      - key: FNB_LINE_CHANNEL_ID
+        sync: false
+      - key: FNB_LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: FNB_LINE_CHANNEL_SECRET
+        sync: false
+      - key: FNB_LINE_LOGIN_CHANNEL_ID
+        sync: false
+      - key: FNB_LINE_LOGIN_CHANNEL_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false

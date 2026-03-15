@@ -4,9 +4,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  experimental: {
-    instrumentationHook: true,
-  },
   // Allow WebSocket connections
   serverExternalPackages: ['ws', 'better-sqlite3'],
 }

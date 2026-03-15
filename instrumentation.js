@@ -6,6 +6,11 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     console.log('[instrumentation] Initializing OpenClaw Office server...')
+
+    if (process.env.OPENCLAW_OFFICE_DISABLE_GATEWAY === '1') {
+      console.log('[instrumentation] Gateway disabled for this session, skipping WebSocket connection.')
+      return
+    }
     
     try {
       const { connect } = await import('./lib/openclaw-ws.js')
