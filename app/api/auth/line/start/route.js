@@ -3,6 +3,7 @@ import {
   createLineAuthUrl,
   getDefaultLocationId,
   getLineOAuthCookieName,
+  getPublicBaseUrl,
 } from '../../../../../lib/fnb-service.js'
 
 function resolveInput(request, body = null) {
@@ -21,7 +22,7 @@ function normalizeRedirectTo(value) {
 }
 
 function buildOnboardingUrl(origin, redirectTo) {
-  const url = new URL(normalizeRedirectTo(redirectTo), origin)
+  const url = new URL(normalizeRedirectTo(redirectTo), getPublicBaseUrl(origin))
   url.searchParams.set('line', 'needs-onboarding')
   url.searchParams.set('reason', 'missing-location')
   return url
