@@ -19,5 +19,13 @@ try {
 if (process.env.PORT) port = process.env.PORT;
 
 console.log(`Starting OpenClaw Office on port ${port}...`);
-const nextBin = join(process.cwd(), 'node_modules', 'next', 'dist', 'bin', 'next');
-execFileSync(process.execPath, [nextBin, 'start', '-p', String(port), '-H', host], { stdio: 'inherit' });
+const standalonePath = join(process.cwd(), '.next', 'standalone', 'server.js');
+if (existsSync(standalonePath)) {
+  execFileSync(process.execPath, [standalonePath], {
+    stdio: 'inherit',
+    env: { ...process.env, PORT: String(port), HOSTNAME: host },
+  });
+} else {
+  const nextBin = join(process.cwd(), 'node_modules', 'next', 'dist', 'bin', 'next');
+  execFileSync(process.execPath, [nextBin, 'start', '-p', String(port), '-H', host], { stdio: 'inherit' });
+}

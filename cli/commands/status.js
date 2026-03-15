@@ -12,16 +12,28 @@ export async function statusCommand() {
 
   const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 
+  // Read version from package.json
+  let version = 'unknown';
+  try {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
+    version = pkg.version || 'unknown';
+  } catch {}
+
+  // Count agents (config.agents is an object keyed by ID)
+  const agentCount = config.agents
+    ? (Array.isArray(config.agents) ? config.agents.length : Object.keys(config.agents).length)
+    : 0;
+
   console.log();
   console.log(chalk.bold.cyan('  🏢 OpenClaw Office Status'));
   console.log(chalk.cyan('  ━━━━━━━━━━━━━━━━━━━━━━━━'));
   console.log();
-  console.log(`    ${chalk.dim('Version:')}     ${config.version}`);
+  console.log(`    ${chalk.dim('Version:')}     ${version}`);
   console.log(`    ${chalk.dim('Gateway:')}     ${config.gateway?.url || 'not set'}`);
-  console.log(`    ${chalk.dim('Agents:')}      ${config.agents?.length || 0} configured`);
-  console.log(`    ${chalk.dim('Style:')}       ${config.style?.theme || 'default'}`);
+  console.log(`    ${chalk.dim('Agents:')}      ${agentCount} configured`);
+  console.log(`    ${chalk.dim('Style:')}       ${config.office?.style || config.style?.theme || 'default'}`);
   console.log(`    ${chalk.dim('Deployment:')}  ${config.deployment?.method || 'manual'}`);
-  console.log(`    ${chalk.dim('Port:')}        ${config.deployment?.port || 4200}`);
+  console.log(`    ${chalk.dim('Port:')}        ${process.env.PORT || config.deployment?.port || 4200}`);
   console.log();
 
   // Test gateway connection
