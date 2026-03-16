@@ -13,6 +13,7 @@ import DatabaseDashboard from './DatabaseDashboard'
 import CostDashboard from './CostDashboard'
 import FnbOpsConsole from './FnbOpsConsole'
 import BossInboxDashboard from './BossInboxDashboard'
+import CurrentTasksPanel from './CurrentTasksPanel'
 
 const tabs = [
   { id: 'boss', label: 'Boss Inbox', icon: Inbox },
@@ -156,6 +157,7 @@ export default function LegacyOfficeDashboard() {
             </div>
 
             <div className="space-y-4">
+              <CurrentTasksPanel />
               <RequestPipeline onRequestUpdate={handleRequestUpdate} />
               <ActivityLog />
             </div>
