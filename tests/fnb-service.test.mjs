@@ -312,6 +312,22 @@ test('rewrite command moves thread into awaiting input and next message creates 
   assert.equal(rewriteTask.task.context.sourceDraft.id, draftId)
 })
 
+test('explicit generate request does not reuse previous draft just because it mentions tone', { concurrency: false }, async () => {
+  await configureProvider('sqlite')
+
+  const first = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '幫我寫這週平日下午茶促銷文案')
+  assert.equal(first.task.taskType, 'generate-copy')
+  assert.match(first.draft.title, /下午茶|促銷/)
+
+  const second = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '幫我寫晚餐推薦，口吻像熟客推薦')
+  assert.equal(second.status, 'draft-ready')
+  assert.equal(second.task.taskType, 'generate-copy')
+  assert.equal(second.task.context.sourceDraft, null)
+  assert.match(second.draft.title, /晚餐推薦/)
+  assert.match(second.draft.body, /晚餐/)
+  assert.doesNotMatch(second.draft.body, /平日下午茶/)
+})
+
 test('unbound line webhook replies with binding instructions instead of staying silent', { concurrency: false }, async () => {
   await configureProvider('sqlite', { demoMode: false })
 
