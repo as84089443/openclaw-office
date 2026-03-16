@@ -328,6 +328,26 @@ test('explicit generate request does not reuse previous draft just because it me
   assert.doesNotMatch(second.draft.body, /平日下午茶/)
 })
 
+test('strong generate request exits pending rewrite flow and starts a fresh draft', { concurrency: false }, async () => {
+  await configureProvider('sqlite')
+
+  const first = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '幫我寫這週平日下午茶促銷文案')
+  const rewritePrompt = await service.handleMerchantReply(null, 'rewrite-draft', {
+    draftId: first.draft.id,
+    actorId: 'line:merchant-azhu',
+    lineUserId: 'line:merchant-azhu',
+  })
+  assert.equal(rewritePrompt.status, 'awaiting-input')
+
+  const second = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '幫我寫晚餐推薦，口吻像熟客推薦')
+  assert.equal(second.status, 'draft-ready')
+  assert.equal(second.task.taskType, 'generate-copy')
+  assert.equal(second.task.context.sourceDraft, null)
+  assert.match(second.draft.title, /晚餐推薦/)
+  assert.match(second.draft.body, /晚餐/)
+  assert.doesNotMatch(second.draft.body, /平日下午茶/)
+})
+
 test('unbound line webhook replies with binding instructions instead of staying silent', { concurrency: false }, async () => {
   await configureProvider('sqlite', { demoMode: false })
 
