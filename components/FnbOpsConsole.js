@@ -209,6 +209,9 @@ export default function FnbOpsConsole() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyAction, setBusyAction] = useState('')
+  const [authRequired, setAuthRequired] = useState(false)
+  const [authToken, setAuthToken] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
 
   const applyOpsResponse = useCallback((data) => {
     setSnapshot(data.snapshot || null)
@@ -217,15 +220,28 @@ export default function FnbOpsConsole() {
     setSelectedLocationId(data.snapshot?.location?.id || data.defaultLocationId || '')
   }, [])
 
+  const handleUnauthorized = useCallback((message = '需要內部 admin token 才能存取 ops。') => {
+    setAuthRequired(true)
+    setSnapshot(null)
+    setLocations([])
+    setServiceStatus(null)
+    setError(message)
+  }, [])
+
   const fetchSnapshot = useCallback(async (nextLocationId = '') => {
     try {
       const params = new URLSearchParams()
       if (nextLocationId) params.set('locationId', nextLocationId)
       const response = await fetch(`/api/fnb/ops${params.size ? `?${params.toString()}` : ''}`)
       const data = await response.json()
+      if (response.status === 401) {
+        handleUnauthorized(data.error || '需要內部 admin token 才能存取 ops。')
+        return
+      }
       if (!response.ok || !data.ok) {
         throw new Error(data.error || 'Failed to load F&B ops snapshot')
       }
+      setAuthRequired(false)
       applyOpsResponse(data)
       setError('')
     } catch (fetchError) {
@@ -233,7 +249,7 @@ export default function FnbOpsConsole() {
     } finally {
       setLoading(false)
     }
-  }, [applyOpsResponse])
+  }, [applyOpsResponse, handleUnauthorized])
 
   useEffect(() => {
     fetchSnapshot()
@@ -253,9 +269,14 @@ export default function FnbOpsConsole() {
         }),
       })
       const data = await response.json()
+      if (response.status === 401) {
+        handleUnauthorized(data.error || '需要內部 admin token 才能執行營運操作。')
+        return null
+      }
       if (!response.ok || !data.ok) {
         throw new Error(data.error || `Action failed: ${action}`)
       }
+      setAuthRequired(false)
       applyOpsResponse(data)
       setInviteLinks(data.result?.links || null)
       if (action === 'onboard-merchant') {
@@ -269,7 +290,52 @@ export default function FnbOpsConsole() {
     } finally {
       setBusyAction('')
     }
-  }, [applyOpsResponse, selectedLocationId, snapshot])
+  }, [applyOpsResponse, handleUnauthorized, selectedLocationId, snapshot])
+
+  const submitOpsAuth = useCallback(async () => {
+    const trimmed = authToken.trim()
+    if (!trimmed) {
+      setError('請輸入 FNB_INTERNAL_API_TOKEN。')
+      return
+    }
+
+    setAuthBusy(true)
+    try {
+      const response = await fetch('/api/fnb/ops/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: trimmed }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Ops auth failed')
+      }
+      setAuthRequired(false)
+      setAuthToken('')
+      setError('')
+      setLoading(true)
+      await fetchSnapshot(selectedLocationId)
+    } catch (authError) {
+      setError(authError.message)
+    } finally {
+      setAuthBusy(false)
+    }
+  }, [authToken, fetchSnapshot, selectedLocationId])
+
+  const logoutOpsAuth = useCallback(async () => {
+    setAuthBusy(true)
+    try {
+      await fetch('/api/fnb/ops/session', { method: 'DELETE' })
+    } finally {
+      setAuthRequired(true)
+      setSnapshot(null)
+      setLocations([])
+      setServiceStatus(null)
+      setBusyAction('')
+      setLoading(false)
+      setAuthBusy(false)
+    }
+  }, [])
 
   const updateOnboardingField = useCallback((key, value) => {
     setOnboardingForm((current) => ({
@@ -378,6 +444,48 @@ export default function FnbOpsConsole() {
     )
   }
 
+  if (authRequired) {
+    return (
+      <div className="glass-card rounded-2xl p-6">
+        <div className="max-w-xl space-y-5">
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
+              <ShieldAlert className="h-4 w-4" />
+              <span>Internal Ops Access Required</span>
+            </div>
+            <h2 className="font-display text-3xl text-white">輸入內部 admin token</h2>
+            <p className="mt-3 text-sm leading-7 text-gray-300">
+              `/ops` 與營運 API 現在只接受 `FNB_INTERNAL_API_TOKEN`。驗證成功後會建立一個 httpOnly session，
+              之後同一瀏覽器就不需要重複輸入。
+            </p>
+          </div>
+
+          <Field label="Admin Token" hint="使用 Render 或 .env.local 裡的 FNB_INTERNAL_API_TOKEN。">
+            <TextInput
+              type="password"
+              value={authToken}
+              onChange={(event) => setAuthToken(event.target.value)}
+              placeholder="貼上 FNB_INTERNAL_API_TOKEN"
+            />
+          </Field>
+
+          {error ? (
+            <div className="rounded-lg border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap gap-3">
+            <ActionButton onClick={submitOpsAuth} disabled={authBusy} tone="#00f5ff">
+              <ShieldAlert className="mr-1 inline h-4 w-4" />
+              驗證並進入 ops
+            </ActionButton>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="glass-card rounded-2xl p-6">
@@ -409,6 +517,10 @@ export default function FnbOpsConsole() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <ActionButton onClick={logoutOpsAuth} disabled={Boolean(busyAction) || authBusy} tone="#fb7185">
+              <ShieldAlert className="mr-1 inline h-4 w-4" />
+              登出 ops
+            </ActionButton>
             <ActionButton onClick={() => postAction('generate-plan')} disabled={Boolean(busyAction) || !canRunActions} tone="#ffb703">
               <CalendarRange className="mr-1 inline h-4 w-4" />
               產新一週計畫
@@ -964,6 +1076,80 @@ export default function FnbOpsConsole() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="glass-card rounded-xl p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Merchant NL Copilot</div>
+            <div className="mt-1 text-sm text-gray-400">商家自然語言任務、卡住原因與 OpenClaw handoff 狀態。</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <ActionButton
+              onClick={() => postAction('merchant-copilot-complete-next')}
+              disabled={Boolean(busyAction)}
+              tone="#00f5ff"
+            >
+              <Bot className="mr-1 inline h-4 w-4" />
+              處理下一筆
+            </ActionButton>
+            <div className="rounded-full border border-cyan-500/30 px-3 py-1 text-xs text-cyan-300">
+              {snapshot?.merchantCopilot?.tasks?.length || 0} tasks
+            </div>
+          </div>
+        </div>
+
+        {(snapshot?.merchantCopilot?.tasks || []).length ? (
+          <div className="space-y-3">
+            {snapshot.merchantCopilot.tasks.map((task) => (
+              <div key={task.id} className="rounded-xl border border-white/5 bg-black/20 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Bot className="h-4 w-4 text-cyan-300" />
+                      <div className="font-semibold text-white">{task.title || 'Merchant Copilot 任務'}</div>
+                    </div>
+                    <div className="mt-2 text-sm leading-7 text-gray-300">{task.instructionText}</div>
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
+                      <span>type: {task.taskType}</span>
+                      <span>status: {task.status}</span>
+                      <span>assigned: {task.assignedTo || 'unassigned'}</span>
+                      {task.confidence !== null && task.confidence !== undefined ? (
+                        <span>confidence: {Math.round(task.confidence * 100)}%</span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 rounded-lg border px-3 py-2 text-xs"
+                    style={{
+                      borderColor: task.status === 'completed' ? 'rgba(57,255,20,0.4)' : task.status === 'ops-review' || task.status === 'failed' ? 'rgba(251,113,133,0.4)' : 'rgba(0,245,255,0.35)',
+                      color: task.status === 'completed' ? '#39ff14' : task.status === 'ops-review' || task.status === 'failed' ? '#fb7185' : '#00f5ff',
+                    }}
+                  >
+                    {task.status}
+                  </div>
+                </div>
+
+                {task.outputDraft ? (
+                  <div className="mt-4 rounded-lg border border-green-500/20 bg-green-500/5 p-3">
+                    <div className="text-sm font-semibold text-white">{task.outputDraft.title}</div>
+                    <div className="mt-2 whitespace-pre-line text-sm leading-7 text-gray-300">{task.outputDraft.body}</div>
+                  </div>
+                ) : null}
+
+                {task.errorMessage ? (
+                  <div className="mt-3 rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-3 text-sm text-red-200">
+                    {task.errorMessage}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
+            目前沒有新的 Merchant Copilot 任務。
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">

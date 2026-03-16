@@ -5,9 +5,11 @@ import {
   listMerchantLocations,
   onboardMerchant,
 } from '../../../../lib/fnb-service.js'
+import { assertInternalApiRequest, getRequestErrorStatus } from '../../../../lib/fnb/route-auth.js'
 
 export async function GET(request) {
   try {
+    assertInternalApiRequest(request)
     const { searchParams } = new URL(request.url)
     const locations = await listMerchantLocations()
     const locationId = searchParams.get('locationId') || await getDefaultLocationId()
@@ -31,12 +33,13 @@ export async function GET(request) {
     return Response.json({
       ok: false,
       error: error.message,
-    }, { status: 500 })
+    }, { status: getRequestErrorStatus(error) })
   }
 }
 
 export async function POST(request) {
   try {
+    assertInternalApiRequest(request)
     const body = await request.json()
     const result = await onboardMerchant(body)
     return Response.json({
@@ -49,6 +52,6 @@ export async function POST(request) {
     return Response.json({
       ok: false,
       error: error.message,
-    }, { status: 500 })
+    }, { status: getRequestErrorStatus(error) })
   }
 }

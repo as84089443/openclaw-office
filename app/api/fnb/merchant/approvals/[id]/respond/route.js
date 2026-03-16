@@ -9,6 +9,7 @@ import {
 const intentByAction = {
   approve: 'approve-draft',
   reschedule: 'reschedule-draft',
+  rewrite: 'rewrite-draft',
   skip: 'skip-draft',
 }
 
@@ -44,6 +45,7 @@ export async function POST(request, { params }) {
     const result = await handleMerchantReply(home.activeMembership.location.id, messageIntent, {
       draftId: approval.draftId,
       actorId: home.operator.id,
+      lineUserId,
       scheduledFor: body.scheduledFor || null,
     })
 
