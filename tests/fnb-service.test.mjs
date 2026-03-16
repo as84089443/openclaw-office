@@ -284,31 +284,20 @@ test('merchant natural language webhook creates task and completion returns appr
   const webhookResult = await service.processLineWebhook(rawBody, signature)
 
   assert.equal(webhookResult.ok, true)
-  assert.equal(webhookResult.processed[0].result.status, 'task-created')
+  assert.equal(webhookResult.processed[0].result.status, 'draft-ready')
+  assert.ok(webhookResult.processed[0].result.replyText.includes('待審核卡片'))
 
   const homeAfterWebhook = await service.getMerchantHome('line:merchant-azhu')
-  assert.equal(homeAfterWebhook.merchantCopilot.tasks[0].status, 'delegated')
-
-  const claimed = await service.claimNextMerchantCopilotTask()
-  assert.equal(claimed.task.status, 'in_progress')
-
-  const completed = await service.completeMerchantCopilotTask(claimed.task.id)
-  assert.equal(completed.ok, true)
-  assert.ok(completed.draft?.title)
-
-  const homeAfterComplete = await service.getMerchantHome('line:merchant-azhu')
-  assert.ok(homeAfterComplete.approvals.some((approval) => approval.payload?.origin === 'merchant-copilot'))
-  assert.equal(homeAfterComplete.merchantCopilot.tasks[0].status, 'completed')
+  assert.equal(homeAfterWebhook.merchantCopilot.tasks[0].status, 'completed')
+  assert.ok(homeAfterWebhook.approvals.some((approval) => approval.payload?.origin === 'merchant-copilot'))
 })
 
 test('rewrite command moves thread into awaiting input and next message creates rewrite task', { concurrency: false }, async () => {
   await configureProvider('sqlite')
 
   const initial = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '幫我寫這週平日下午茶促銷文案')
-  assert.equal(initial.status, 'task-created')
-  const claimed = await service.claimNextMerchantCopilotTask()
-  const completed = await service.completeMerchantCopilotTask(claimed.task.id)
-  const draftId = completed.draft.id
+  assert.equal(initial.status, 'draft-ready')
+  const draftId = initial.draft.id
 
   const rewritePrompt = await service.handleMerchantReply(null, 'rewrite-draft', {
     draftId,
@@ -318,9 +307,48 @@ test('rewrite command moves thread into awaiting input and next message creates 
   assert.equal(rewritePrompt.status, 'awaiting-input')
 
   const rewriteTask = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '更像熟客口吻，縮短成 LINE 推播長度')
-  assert.equal(rewriteTask.status, 'task-created')
+  assert.equal(rewriteTask.status, 'draft-ready')
   assert.equal(rewriteTask.task.taskType, 'rewrite-copy')
   assert.equal(rewriteTask.task.context.sourceDraft.id, draftId)
+})
+
+test('unbound line webhook replies with binding instructions instead of staying silent', { concurrency: false }, async () => {
+  await configureProvider('sqlite', { demoMode: false })
+
+  await service.onboardMerchant({
+    tenantName: '綁定測試租戶',
+    locationName: '綁定測試店',
+    restaurantType: '便當',
+    ownerName: '測試店長',
+  })
+
+  const payload = {
+    events: [
+      {
+        webhookEventId: 'evt-line-unbound-1',
+        type: 'message',
+        timestamp: Date.now(),
+        replyToken: 'reply-token-unbound-1',
+        source: {
+          type: 'user',
+          userId: 'line:unbound-user',
+        },
+        message: {
+          type: 'text',
+          text: '幫我寫這週平日下午茶促銷文案',
+        },
+      },
+    ],
+  }
+
+  const rawBody = JSON.stringify(payload)
+  const signature = createHmac('sha256', process.env.LINE_CHANNEL_SECRET).update(rawBody, 'utf8').digest('base64')
+  const result = await service.processLineWebhook(rawBody, signature)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.processed[0].status, 'binding-required')
+  assert.equal(result.processed[0].result.status, 'binding-required')
+  assert.ok(result.processed[0].result.replyText.includes('/api/auth/line/start'))
 })
 
 test('line auth callback uri stays normalized when public base url has trailing slash', { concurrency: false }, async () => {
