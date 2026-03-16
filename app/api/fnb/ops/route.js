@@ -1,4 +1,6 @@
 import {
+  claimNextMerchantCopilotTask,
+  completeMerchantCopilotTask,
   generateCampaignPlan,
   generateWeeklyDigest,
   getDefaultLocationId,
@@ -11,11 +13,13 @@ import {
   runAutopilot,
   sendApprovalCard,
 } from '../../../../lib/fnb-service.js'
+import { assertInternalApiRequest, getRequestErrorStatus } from '../../../../lib/fnb/route-auth.js'
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
 
   try {
+    assertInternalApiRequest(request)
     const locations = await listMerchantLocations()
     const locationId = searchParams.get('locationId') || await getDefaultLocationId()
     return Response.json({
@@ -29,12 +33,13 @@ export async function GET(request) {
     return Response.json({
       ok: false,
       error: error.message,
-    }, { status: 500 })
+    }, { status: getRequestErrorStatus(error) })
   }
 }
 
 export async function POST(request) {
   try {
+    assertInternalApiRequest(request)
     const body = await request.json()
     const locationId = body.locationId || await getDefaultLocationId()
     const action = body.action
@@ -128,6 +133,21 @@ export async function POST(request) {
       })
     }
 
+    if (action === 'merchant-copilot-complete-next') {
+      const claimed = await claimNextMerchantCopilotTask()
+      const result = claimed?.task
+        ? await completeMerchantCopilotTask(claimed.task.id)
+        : { ok: true, status: 'idle', message: 'No queued merchant copilot task' }
+      return Response.json({
+        ok: true,
+        result,
+        snapshot: await getOpsSnapshot(locationId),
+        locations: await listMerchantLocations(),
+        defaultLocationId: locationId,
+        serviceStatus: await getServiceStatus(),
+      })
+    }
+
     return Response.json({
       ok: false,
       error: `Unsupported action: ${action}`,
@@ -136,6 +156,6 @@ export async function POST(request) {
     return Response.json({
       ok: false,
       error: error.message,
-    }, { status: 500 })
+    }, { status: getRequestErrorStatus(error) })
   }
 }

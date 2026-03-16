@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
+  Bot,
   BellRing,
   CheckCircle2,
   ChevronRight,
@@ -56,6 +57,27 @@ function formatDate(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function formatTaskStatus(status) {
+  switch (status) {
+    case 'delegated':
+      return '已交給 OpenClaw'
+    case 'in_progress':
+      return '生成中'
+    case 'completed':
+      return '已完成'
+    case 'ops-review':
+      return '營運覆核'
+    case 'failed':
+      return '生成失敗'
+    case 'awaiting-rewrite':
+      return '等待你補充'
+    case 'queued':
+      return '已排入佇列'
+    default:
+      return status || '待處理'
+  }
 }
 
 function MerchantButton({ children, onClick, tone = '#00f5ff', disabled, subtle = false }) {
@@ -161,6 +183,7 @@ export default function FnbMerchantSurface() {
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [noteDraft, setNoteDraft] = useState('')
   const [tagDraft, setTagDraft] = useState('')
+  const [chatDraft, setChatDraft] = useState('')
 
   const updateUrl = useCallback((nextTab, nextLocationId) => {
     if (typeof window === 'undefined') return
@@ -355,6 +378,36 @@ export default function FnbMerchantSurface() {
     }
   }, [home, selectedCustomer, tagDraft])
 
+  const submitCopilotMessage = useCallback(async (preset = '') => {
+    if (!home) return
+    const message = String(preset || chatDraft).trim()
+    if (!message) return
+    setBusy('merchant-copilot')
+    try {
+      const response = await fetch('/api/fnb/merchant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locationId: home.activeMembership.location.id,
+          message,
+        }),
+      })
+      const data = await readJsonResponse(response)
+      if (!response.ok || !data.ok) throw new Error(data.error || '送出 Copilot 需求失敗')
+      setHome(data.home)
+      setChatDraft('')
+      setError('')
+      if (activeTab !== 'approvals') {
+        setActiveTab('approvals')
+        updateUrl('approvals', home.activeMembership.location.id)
+      }
+    } catch (actionError) {
+      setError(actionError.message)
+    } finally {
+      setBusy('')
+    }
+  }, [activeTab, chatDraft, home, updateUrl])
+
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId)
     if (!home) {
@@ -544,6 +597,98 @@ export default function FnbMerchantSurface() {
           />
         </motion.section>
 
+        <motion.section
+          className="glass-card rounded-[28px] p-5"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.11 }}
+        >
+          <div className="flex items-center gap-2 text-cyan-300">
+            <Bot className="h-4 w-4" />
+            <span className="text-sm uppercase tracking-[0.18em]">自然語言 Copilot</span>
+          </div>
+
+          <div className="mt-4 rounded-3xl border border-cyan-500/20 bg-cyan-500/6 p-4">
+            <div className="text-sm leading-7 text-gray-200">
+              直接跟我說你想要的文案方向。我會先整理成草稿，完成後再推回來讓你同意、再改或跳過。
+            </div>
+            <textarea
+              value={chatDraft}
+              onChange={(event) => setChatDraft(event.target.value)}
+              rows={3}
+              className="mt-4 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-gray-600"
+              placeholder="例如：幫我寫這週平日下午茶促銷文案，口吻像熟客推薦，不要太硬銷。"
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <MerchantButton tone="#00f5ff" disabled={Boolean(busy) || !chatDraft.trim()} onClick={() => submitCopilotMessage()}>
+                送出需求
+              </MerchantButton>
+              <MerchantButton
+                tone="#39ff14"
+                subtle
+                disabled={Boolean(busy)}
+                onClick={() => submitCopilotMessage('幫我寫這週平日下午茶促銷文案，口吻像熟客推薦。')}
+              >
+                下午茶促銷
+              </MerchantButton>
+              <MerchantButton
+                tone="#ffb703"
+                subtle
+                disabled={Boolean(busy)}
+                onClick={() => submitCopilotMessage('把剛剛那篇縮短到適合 LINE 推播。')}
+              >
+                縮短成推播
+              </MerchantButton>
+            </div>
+          </div>
+
+          {home.merchantCopilot?.activeThreadMessages?.length ? (
+            <div className="mt-4 space-y-3">
+              {home.merchantCopilot.activeThreadMessages.slice(-4).map((message) => (
+                <div
+                  key={message.id}
+                  className="rounded-2xl border px-4 py-3 text-sm leading-7"
+                  style={{
+                    borderColor: message.role === 'merchant' ? 'rgba(0,245,255,0.24)' : 'rgba(57,255,20,0.2)',
+                    background: message.role === 'merchant' ? 'rgba(0,245,255,0.08)' : 'rgba(57,255,20,0.08)',
+                  }}
+                >
+                  <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-gray-500">
+                    {message.role === 'merchant' ? '你' : 'Copilot'}
+                  </div>
+                  <div className="text-gray-100">{message.body}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-3">
+            {(home.merchantCopilot?.tasks || []).length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-700 px-4 py-6 text-sm text-gray-500">
+                還沒有新的自然語言任務。你可以直接用上面的輸入框告訴我想要的文案。
+              </div>
+            ) : (
+              (home.merchantCopilot?.tasks || []).map((task) => (
+                <div key={task.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-white">{task.title || 'Merchant Copilot 任務'}</div>
+                    <StatusPill tone={task.status === 'completed' ? '#39ff14' : task.status === 'ops-review' || task.status === 'failed' ? '#fb7185' : '#00f5ff'}>
+                      {formatTaskStatus(task.status)}
+                    </StatusPill>
+                  </div>
+                  <div className="mt-2 text-sm leading-7 text-gray-300">{task.instructionText}</div>
+                  {task.outputDraft?.title ? (
+                    <div className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/8 px-3 py-3 text-sm text-gray-100">
+                      <div className="font-semibold text-white">{task.outputDraft.title}</div>
+                      <div className="mt-2 whitespace-pre-line leading-7 text-gray-300">{task.outputDraft.body}</div>
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+        </motion.section>
+
         {activeTab === 'approvals' ? (
           <motion.section
             className="glass-card rounded-[28px] p-5"
@@ -592,13 +737,23 @@ export default function FnbMerchantSurface() {
                     >
                       同意排程
                     </MerchantButton>
-                    <MerchantButton
-                      tone="#ffb703"
-                      disabled={Boolean(busy)}
-                      onClick={() => submitApproval(approval.id, 'reschedule')}
-                    >
-                      延到明天
-                    </MerchantButton>
+                    {approval.payload?.origin === 'merchant-copilot' ? (
+                      <MerchantButton
+                        tone="#ffb703"
+                        disabled={Boolean(busy)}
+                        onClick={() => submitApproval(approval.id, 'rewrite')}
+                      >
+                        再改一版
+                      </MerchantButton>
+                    ) : (
+                      <MerchantButton
+                        tone="#ffb703"
+                        disabled={Boolean(busy)}
+                        onClick={() => submitApproval(approval.id, 'reschedule')}
+                      >
+                        延到明天
+                      </MerchantButton>
+                    )}
                     <MerchantButton
                       tone="#fb7185"
                       disabled={Boolean(busy)}

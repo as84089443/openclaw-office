@@ -1,14 +1,7 @@
 import { readFile } from 'fs/promises'
 import { isAbsolute, join } from 'path'
 import { getLineMessagingAdapter } from '../../../../../lib/fnb/channels.js'
-
-function assertAuthorized(request) {
-  if (process.env.FNB_DEMO_MODE === '1') return
-  const token = process.env.FNB_INTERNAL_API_TOKEN
-  if (!token) throw new Error('FNB_INTERNAL_API_TOKEN is required for rich menu sync outside demo mode')
-  const received = request.headers.get('x-fnb-admin-token')
-  if (received !== token) throw new Error('Unauthorized rich menu sync request')
-}
+import { assertInternalApiRequest, getRequestErrorStatus } from '../../../../../lib/fnb/route-auth.js'
 
 function buildTargetUrl(tab) {
   const liffId = process.env.NEXT_PUBLIC_LINE_LIFF_ID || process.env.NEXT_PUBLIC_FNB_LINE_LIFF_ID
@@ -24,7 +17,7 @@ function buildTargetUrl(tab) {
 
 export async function POST(request) {
   try {
-    assertAuthorized(request)
+    assertInternalApiRequest(request)
     const adapter = getLineMessagingAdapter()
     const manifestPath = join(process.cwd(), 'lib', 'fnb', 'merchant-rich-menu.json')
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
@@ -82,6 +75,6 @@ export async function POST(request) {
     return Response.json({
       ok: false,
       error: error.message,
-    }, { status: 500 })
+    }, { status: getRequestErrorStatus(error) })
   }
 }

@@ -216,6 +216,84 @@ CREATE TABLE IF NOT EXISTS fnb_customer_activity_summary (
   updated_at BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS fnb_merchant_threads (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES fnb_tenants(id),
+  location_id TEXT NOT NULL REFERENCES fnb_locations(id),
+  operator_id TEXT NOT NULL REFERENCES fnb_operator_accounts(id),
+  source TEXT NOT NULL DEFAULT 'line',
+  status TEXT NOT NULL DEFAULT 'active',
+  title TEXT,
+  summary TEXT,
+  latest_task_id TEXT,
+  metadata_json JSONB,
+  last_message_at BIGINT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(location_id, operator_id, source)
+);
+
+CREATE TABLE IF NOT EXISTS fnb_merchant_messages (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL REFERENCES fnb_merchant_threads(id),
+  tenant_id TEXT NOT NULL REFERENCES fnb_tenants(id),
+  location_id TEXT NOT NULL REFERENCES fnb_locations(id),
+  operator_id TEXT REFERENCES fnb_operator_accounts(id),
+  external_event_id TEXT,
+  role TEXT NOT NULL,
+  source TEXT NOT NULL,
+  message_type TEXT NOT NULL DEFAULT 'text',
+  intent TEXT,
+  body TEXT NOT NULL,
+  metadata_json JSONB,
+  created_at BIGINT NOT NULL,
+  UNIQUE(source, external_event_id)
+);
+
+CREATE TABLE IF NOT EXISTS fnb_merchant_tasks (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL REFERENCES fnb_merchant_threads(id),
+  tenant_id TEXT NOT NULL REFERENCES fnb_tenants(id),
+  location_id TEXT NOT NULL REFERENCES fnb_locations(id),
+  operator_id TEXT REFERENCES fnb_operator_accounts(id),
+  task_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  source TEXT NOT NULL,
+  dedupe_key TEXT,
+  title TEXT,
+  instruction_text TEXT NOT NULL,
+  context_json JSONB,
+  output_draft_id TEXT REFERENCES fnb_drafts(id),
+  confidence NUMERIC(5, 4),
+  assigned_to TEXT,
+  handoff_ref TEXT,
+  error_message TEXT,
+  started_at BIGINT,
+  completed_at BIGINT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(location_id, dedupe_key)
+);
+
+CREATE TABLE IF NOT EXISTS fnb_merchant_task_events (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES fnb_merchant_tasks(id),
+  location_id TEXT NOT NULL REFERENCES fnb_locations(id),
+  event_type TEXT NOT NULL,
+  payload_json JSONB,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fnb_merchant_prompt_profiles (
+  location_id TEXT PRIMARY KEY REFERENCES fnb_locations(id),
+  preferred_language TEXT DEFAULT 'zh-TW',
+  tone_summary TEXT,
+  forbidden_phrases_json JSONB,
+  preferred_ctas_json JSONB,
+  promo_preferences_json JSONB,
+  updated_at BIGINT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fnb_short_links (
   id TEXT PRIMARY KEY,
   location_id TEXT NOT NULL REFERENCES fnb_locations(id),
@@ -295,6 +373,11 @@ CREATE INDEX IF NOT EXISTS idx_fnb_approvals_location ON fnb_approval_requests(l
 CREATE INDEX IF NOT EXISTS idx_fnb_customers_location ON fnb_customers(location_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_fnb_customer_tags_customer ON fnb_customer_tags(customer_id, tag);
 CREATE INDEX IF NOT EXISTS idx_fnb_customer_notes_customer ON fnb_customer_notes(customer_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_fnb_merchant_threads_location ON fnb_merchant_threads(location_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_fnb_merchant_messages_thread ON fnb_merchant_messages(thread_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_fnb_merchant_tasks_location ON fnb_merchant_tasks(location_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_fnb_merchant_tasks_thread ON fnb_merchant_tasks(thread_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_fnb_merchant_task_events_task ON fnb_merchant_task_events(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_fnb_events_location ON fnb_attribution_events(location_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_fnb_events_source_key ON fnb_attribution_events(location_id, source, source_key);
 CREATE INDEX IF NOT EXISTS idx_fnb_digests_location ON fnb_weekly_digests(location_id, created_at);

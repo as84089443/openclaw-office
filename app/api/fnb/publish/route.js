@@ -1,7 +1,9 @@
 import { publishScheduled } from '../../../../lib/fnb-service.js'
+import { assertInternalApiRequest, getRequestErrorStatus } from '../../../../lib/fnb/route-auth.js'
 
 export async function POST(request) {
   try {
+    assertInternalApiRequest(request)
     const body = await request.json()
     const result = await publishScheduled(body.channel, body.payload || body)
     return Response.json({
@@ -12,6 +14,6 @@ export async function POST(request) {
     return Response.json({
       ok: false,
       error: error.message,
-    }, { status: 500 })
+    }, { status: getRequestErrorStatus(error) })
   }
 }

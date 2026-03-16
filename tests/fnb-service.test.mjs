@@ -8,12 +8,15 @@ import { join } from 'node:path'
 const service = await import('../lib/fnb-service.js')
 
 async function configureProvider(provider, { demoMode = true } = {}) {
+  const tempDir = mkdtempSync(join(tmpdir(), `openclaw-fnb-${provider}-`))
   process.env.FNB_APP_ENV = provider === 'postgres' ? 'staging' : (demoMode ? 'demo' : 'staging')
   process.env.FNB_DEMO_MODE = demoMode ? '1' : '0'
   process.env.LINE_CHANNEL_SECRET = 'test-line-secret'
   process.env.LINE_CHANNEL_ID = 'test-merchant-channel'
   process.env.FNB_LINE_CHANNEL_SECRET = 'test-line-secret'
   process.env.FNB_LINE_CHANNEL_ID = 'test-merchant-channel'
+  process.env.OPENCLAW_OFFICE_DB_PATH = join(tempDir, 'office.db')
+  process.env.FNB_SQLITE_PATH = join(tempDir, 'fnb.db')
   delete process.env.LINE_CHANNEL_ACCESS_TOKEN
   delete process.env.LINE_LOGIN_CHANNEL_ID
   delete process.env.LINE_LOGIN_CHANNEL_SECRET
@@ -30,10 +33,8 @@ async function configureProvider(provider, { demoMode = true } = {}) {
 
   if (provider === 'postgres') {
     process.env.DATABASE_URL = `pg-mem://fnb-${Date.now()}`
-    delete process.env.OPENCLAW_OFFICE_DB_PATH
+    delete process.env.FNB_SQLITE_PATH
   } else {
-    const tempDir = mkdtempSync(join(tmpdir(), 'openclaw-fnb-'))
-    process.env.OPENCLAW_OFFICE_DB_PATH = join(tempDir, 'office.db')
     delete process.env.DATABASE_URL
   }
 
@@ -254,6 +255,72 @@ test('attribution sourceKey deduplicates repeated events', { concurrency: false 
 
   assert.equal(second.duplicated, true)
   assert.equal(first.id, second.id)
+})
+
+test('merchant natural language webhook creates task and completion returns approval draft', { concurrency: false }, async () => {
+  await configureProvider('sqlite')
+
+  const payload = {
+    events: [
+      {
+        webhookEventId: 'evt-line-nl-1',
+        type: 'message',
+        timestamp: Date.now(),
+        replyToken: 'reply-token-nl-1',
+        source: {
+          type: 'user',
+          userId: 'line:merchant-azhu',
+        },
+        message: {
+          type: 'text',
+          text: '幫我寫這週平日下午茶促銷文案，口吻像熟客推薦。',
+        },
+      },
+    ],
+  }
+
+  const rawBody = JSON.stringify(payload)
+  const signature = createHmac('sha256', process.env.LINE_CHANNEL_SECRET).update(rawBody, 'utf8').digest('base64')
+  const webhookResult = await service.processLineWebhook(rawBody, signature)
+
+  assert.equal(webhookResult.ok, true)
+  assert.equal(webhookResult.processed[0].result.status, 'task-created')
+
+  const homeAfterWebhook = await service.getMerchantHome('line:merchant-azhu')
+  assert.equal(homeAfterWebhook.merchantCopilot.tasks[0].status, 'delegated')
+
+  const claimed = await service.claimNextMerchantCopilotTask()
+  assert.equal(claimed.task.status, 'in_progress')
+
+  const completed = await service.completeMerchantCopilotTask(claimed.task.id)
+  assert.equal(completed.ok, true)
+  assert.ok(completed.draft?.title)
+
+  const homeAfterComplete = await service.getMerchantHome('line:merchant-azhu')
+  assert.ok(homeAfterComplete.approvals.some((approval) => approval.payload?.origin === 'merchant-copilot'))
+  assert.equal(homeAfterComplete.merchantCopilot.tasks[0].status, 'completed')
+})
+
+test('rewrite command moves thread into awaiting input and next message creates rewrite task', { concurrency: false }, async () => {
+  await configureProvider('sqlite')
+
+  const initial = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '幫我寫這週平日下午茶促銷文案')
+  assert.equal(initial.status, 'task-created')
+  const claimed = await service.claimNextMerchantCopilotTask()
+  const completed = await service.completeMerchantCopilotTask(claimed.task.id)
+  const draftId = completed.draft.id
+
+  const rewritePrompt = await service.handleMerchantReply(null, 'rewrite-draft', {
+    draftId,
+    actorId: 'line:merchant-azhu',
+    lineUserId: 'line:merchant-azhu',
+  })
+  assert.equal(rewritePrompt.status, 'awaiting-input')
+
+  const rewriteTask = await service.submitMerchantCopilotMessage('line:merchant-azhu', null, '更像熟客口吻，縮短成 LINE 推播長度')
+  assert.equal(rewriteTask.status, 'task-created')
+  assert.equal(rewriteTask.task.taskType, 'rewrite-copy')
+  assert.equal(rewriteTask.task.context.sourceDraft.id, draftId)
 })
 
 test('line auth callback uri stays normalized when public base url has trailing slash', { concurrency: false }, async () => {
