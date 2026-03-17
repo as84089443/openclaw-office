@@ -27,6 +27,14 @@ services:
         value: 1
       - key: OPENCLAW_OFFICE_DISABLE_GATEWAY
         value: 1
+      - key: OPENCLAW_CONFIG_JSON
+        sync: false
+      - key: OPENCLAW_OFFICE_CONFIG_JSON
+        sync: false
+      - key: OPENCLAW_GATEWAY_URL
+        sync: false
+      - key: OPENCLAW_OFFICE_DB_PATH
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: openclaw-fnb-db

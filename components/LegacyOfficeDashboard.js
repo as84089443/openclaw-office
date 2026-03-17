@@ -17,7 +17,7 @@ import CurrentTasksPanel from './CurrentTasksPanel'
 
 const tabs = [
   { id: 'boss', label: 'Boss Inbox', icon: Inbox },
-  { id: 'fnb', label: 'F&B Copilot', icon: Store },
+  { id: 'fnb', label: 'BW Copilot', icon: Store },
   { id: 'office', label: 'Legacy Office', icon: Building2 },
   { id: 'stats', label: 'Interaction Stats', icon: Activity },
   { id: 'team', label: 'AI Team', icon: Users },
@@ -33,24 +33,46 @@ export default function LegacyOfficeDashboard() {
     tokens: 0,
     savings: 0,
   })
+  const [configWarnings, setConfigWarnings] = useState([])
+  const [statsWarning, setStatsWarning] = useState('')
   const [activeRequest, setActiveRequest] = useState(null)
 
   useEffect(() => {
     const fetchHeaderStats = async () => {
       try {
         const response = await fetch('/api/stats')
-        const data = await response.json()
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(data?.error || 'Interaction stats unavailable')
+        }
         setHeaderStats({
-          tasks: data.allTime.tasks_completed || 0,
-          tokens: data.allTime.tokens.total || 0,
-          savings: Math.round(data.allTime.savings_usd || 0),
+          tasks: data.allTime?.tasks_completed || 0,
+          tokens: data.allTime?.tokens?.total || 0,
+          savings: Math.round(data.allTime?.savings_usd || 0),
         })
+        setStatsWarning('')
       } catch (error) {
         console.error('Failed to fetch header stats:', error)
+        setStatsWarning('Interaction Stats 目前不可用，Header 先顯示降級數值。')
+      }
+    }
+
+    const fetchDiagnostics = async () => {
+      try {
+        const response = await fetch('/api/config')
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(data?.error || 'Config API unavailable')
+        }
+        setConfigWarnings((data.diagnostics?.warnings || []).map((warning) => warning.message))
+      } catch (error) {
+        console.error('Failed to fetch diagnostics:', error)
+        setConfigWarnings(['目前拿不到 deployment diagnostics，Legacy Office / AI Team 可能只會顯示降級狀態。'])
       }
     }
 
     fetchHeaderStats()
+    fetchDiagnostics()
     const interval = setInterval(fetchHeaderStats, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -129,6 +151,19 @@ export default function LegacyOfficeDashboard() {
           </motion.button>
         ))}
       </motion.nav>
+
+      {(configWarnings.length > 0 || statsWarning) && (
+        <motion.div
+          className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-100"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          {configWarnings.map((warning) => (
+            <div key={warning}>{warning}</div>
+          ))}
+          {statsWarning && <div>{statsWarning}</div>}
+        </motion.div>
+      )}
 
       <AnimatePresence mode="wait">
         {activeTab === 'boss' && (

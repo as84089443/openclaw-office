@@ -21,7 +21,7 @@ function NavBar() {
           </a>
         </div>
         <div className="text-xs text-gray-500">
-          Restaurant Growth Copilot
+          BW Copilot
         </div>
       </div>
     </nav>

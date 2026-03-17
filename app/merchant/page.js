@@ -2,8 +2,8 @@ import { Suspense } from 'react'
 import FnbMerchantSurface from '../../components/FnbMerchantSurface'
 
 export const metadata = {
-  title: 'F&B Merchant Copilot',
-  description: 'Merchant-facing low-touch restaurant growth copilot.',
+  title: 'BW Merchant Copilot',
+  description: 'Merchant-facing low-touch BW copilot.',
 }
 
 export default function MerchantPage() {

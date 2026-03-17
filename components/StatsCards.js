@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 
 export default function StatsCards({ initialStats }) {
   const [stats, setStats] = useState(null)
+  const [error, setError] = useState('')
   const [animatedStats, setAnimatedStats] = useState({
     conversations: 0,
     tokens: 0,
@@ -16,12 +17,20 @@ export default function StatsCards({ initialStats }) {
   // Fetch real stats from API
   const fetchStats = useCallback(async () => {
     try {
+      setError('')
       const response = await fetch('/api/stats')
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Interaction stats API unavailable')
+      }
+      if (!data?.today || !data?.allTime) {
+        throw new Error('Interaction stats payload is incomplete')
+      }
       setStats(data)
       setLoading(false)
     } catch (error) {
       console.error('Failed to fetch stats:', error)
+      setError(error.message || 'Interaction stats API unavailable')
       setLoading(false)
     }
   }, [])
@@ -82,6 +91,25 @@ export default function StatsCards({ initialStats }) {
     )
   }
 
+  if (!stats) {
+    return (
+      <div className="glass-card rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+        <div className="mb-2 text-sm font-semibold text-amber-300">Interaction Stats 暫時不可用</div>
+        <div className="text-sm leading-6 text-gray-300">
+          目前拿不到 `/api/stats` 的真實資料。
+        </div>
+        {error && (
+          <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-gray-400">
+            錯誤原因：{error}
+          </div>
+        )}
+        <div className="mt-3 text-xs text-gray-500">
+          常見原因是部署端 office DB 不可寫，或 OpenClaw stats source 尚未掛上。
+        </div>
+      </div>
+    )
+  }
+
   const cards = [
     {
       label: "Today's Messages",
@@ -115,6 +143,12 @@ export default function StatsCards({ initialStats }) {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
+          Interaction Stats 已切到降級模式，顯示的是最後一次成功載入的資料。最新錯誤：{error}
+        </div>
+      )}
+
       {/* Main Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card, index) => (

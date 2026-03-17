@@ -115,6 +115,8 @@ async function notifyTaskMilestone(task, status) {
     message = `⚠️ <b>任務卡住</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
   } else if (status === 'stale') {
     message = `⏰ <b>任務久未更新</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
+  } else if (status === 'continued') {
+    message = `🔁 <b>任務續跑</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
   }
 
   if (message) {
@@ -124,6 +126,49 @@ async function notifyTaskMilestone(task, status) {
       console.error('[workflow] milestone notify failed:', error.message)
     }
   }
+}
+
+function needsContinuationFromText(text = '') {
+  const normalized = String(text || '').trim()
+  if (!normalized) return false
+  return /(還沒做|還未做|下一步|還剩|可再補|接著做|繼續做|後續再做|待處理|待補|之後處理)/.test(normalized)
+}
+
+async function executePendingAction(task, now = Date.now()) {
+  if (!task?.pendingAction) return null
+
+  if (task.pendingAction === 'start_work') {
+    const patched = updateTask(task.id, {
+      status: 'in_progress',
+      startedAt: task.startedAt || now,
+      ...taskProgressMeta('in_progress'),
+      continuationRequired: false,
+      pendingAction: null,
+      continuationCheckedAt: now,
+    })
+    if (task.requestId) updateRequest(task.requestId, { state: 'in_progress', workStartedAt: task.startedAt || now })
+    emitTaskUpdate(task.id)
+    await notifyTaskMilestone(patched || getTaskById(task.id), 'in_progress')
+    return patched
+  }
+
+  if (task.pendingAction === 'continue_after_reply') {
+    const patched = updateTask(task.id, {
+      status: 'in_progress',
+      milestone: '續跑中',
+      nextStep: '依上一則回報的未完項目繼續執行',
+      continuationRequired: false,
+      pendingAction: null,
+      continuationCheckedAt: now,
+      completionGateRequired: true,
+      lastUpdate: now,
+    })
+    emitTaskUpdate(task.id)
+    await notifyTaskMilestone(patched || getTaskById(task.id), 'continued')
+    return patched
+  }
+
+  return null
 }
 
 const STALE_TASK_THRESHOLD_MS = 15 * 60 * 1000
@@ -141,17 +186,8 @@ if (!globalThis.__officeStaleTaskMonitorStarted) {
         const updatedAt = Number(task.lastUpdate || task.startedAt || task.createdAt || 0)
         if (!updatedAt) continue
 
-        if (task.status === 'assigned' && task.continuationRequired && (!task.continuationCheckedAt || now - Number(task.continuationCheckedAt) > CONTINUATION_CHECK_MS)) {
-          const patched = updateTask(task.id, {
-            status: 'in_progress',
-            startedAt: task.startedAt || now,
-            ...taskProgressMeta('in_progress'),
-            continuationRequired: false,
-            pendingAction: null,
-            continuationCheckedAt: now,
-          })
-          emitTaskUpdate(task.id)
-          await notifyTaskMilestone(patched || getTaskById(task.id), 'in_progress')
+        if (task.continuationRequired && (!task.continuationCheckedAt || now - Number(task.continuationCheckedAt) > CONTINUATION_CHECK_MS)) {
+          await executePendingAction(task, now)
           continue
         }
 
@@ -162,7 +198,7 @@ if (!globalThis.__officeStaleTaskMonitorStarted) {
             continuationCheckedAt: now,
             completionGateRequired: false,
             milestone: task.milestone || '持續執行中',
-            nextStep: task.nextStep || '里程碑回報後需自動續跑',
+            nextStep: task.nextStep || '依未完成項目自動續跑',
             lastUpdate: updatedAt,
           })
           emitTaskUpdate(task.id)
@@ -588,8 +624,26 @@ export async function POST(request) {
       const taskTimeMs = task.startedAt ? completedAt - task.startedAt : 5000
       const feedback = normalizeCompletionFeedback({ success, body, task, taskTimeMs })
       const completionResult = result || (success ? 'Completed' : 'Failed')
+      const shouldContinue = success && needsContinuationFromText(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)
       
-      updateTask(task.id, {
+      updateTask(task.id, shouldContinue ? {
+        status: 'in_progress',
+        milestone: '回報後續跑',
+        nextStep: body?.nextStep || '依回報中的未完項目繼續執行',
+        continuationRequired: true,
+        pendingAction: 'continue_after_reply',
+        continuationCheckedAt: null,
+        completionGateRequired: false,
+        lastUpdate: completedAt,
+        result: completionResult,
+        completionValue: feedback.completionValue,
+        businessDelta: feedback.businessDelta,
+        processScore: feedback.processScore,
+        businessScore: feedback.businessScore,
+        didImproveScore: feedback.didImproveScore,
+        didImprove: feedback.didImprove,
+        rollbackNeeded: feedback.rollbackNeeded,
+      } : {
         status: success ? 'completed' : 'failed',
         completedAt,
         ...taskProgressMeta(success ? 'completed' : 'failed'),
@@ -603,7 +657,7 @@ export async function POST(request) {
         rollbackNeeded: feedback.rollbackNeeded,
       })
       emitTaskUpdate(task.id)
-      notifyTaskMilestone(getTaskById(task.id), success ? 'completed' : 'failed')
+      notifyTaskMilestone(getTaskById(task.id), shouldContinue ? 'continued' : (success ? 'completed' : 'failed'))
       writeCompletionFeedbackToAttention({
         taskId: task.id,
         requestId: task.requestId,
@@ -679,8 +733,26 @@ export async function POST(request) {
       const taskTimeMs = task.startedAt ? completedAt - task.startedAt : 5000
       const feedback = normalizeCompletionFeedback({ success, body, task, taskTimeMs })
       const completionResult = result || (success ? 'Completed' : 'Failed')
+      const shouldContinue = success && needsContinuationFromText(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)
 
-      updateTask(task.id, {
+      updateTask(task.id, shouldContinue ? {
+        status: 'in_progress',
+        milestone: '回報後續跑',
+        nextStep: body?.nextStep || '依回報中的未完項目繼續執行',
+        continuationRequired: true,
+        pendingAction: 'continue_after_reply',
+        continuationCheckedAt: null,
+        completionGateRequired: false,
+        lastUpdate: completedAt,
+        result: completionResult,
+        completionValue: feedback.completionValue,
+        businessDelta: feedback.businessDelta,
+        processScore: feedback.processScore,
+        businessScore: feedback.businessScore,
+        didImproveScore: feedback.didImproveScore,
+        didImprove: feedback.didImprove,
+        rollbackNeeded: feedback.rollbackNeeded,
+      } : {
         status: success ? 'completed' : 'failed',
         completedAt,
         ...taskProgressMeta(success ? 'completed' : 'failed'),
@@ -694,6 +766,7 @@ export async function POST(request) {
         rollbackNeeded: feedback.rollbackNeeded,
       })
       emitTaskUpdate(task.id)
+      notifyTaskMilestone(getTaskById(task.id), shouldContinue ? 'continued' : (success ? 'completed' : 'failed'))
       writeCompletionFeedbackToAttention({
         taskId: task.id,
         requestId: task.requestId,

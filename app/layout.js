@@ -2,8 +2,8 @@ import './globals.css'
 import AppChrome from '../components/AppChrome'
 
 export const metadata = {
-  title: 'OpenClaw F&B Copilot',
-  description: 'Merchant-facing and ops-facing surfaces for the OpenClaw restaurant growth copilot.',
+  title: 'OpenClaw BW Copilot',
+  description: 'Merchant-facing and ops-facing surfaces for the OpenClaw BW copilot.',
 }
 
 export default function RootLayout({ children }) {
