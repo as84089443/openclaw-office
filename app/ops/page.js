@@ -1,8 +1,8 @@
 import FnbOpsConsole from '../../components/FnbOpsConsole'
 
 export const metadata = {
-  title: 'F&B Copilot Ops',
-  description: 'Internal operations console for the OpenClaw F&B Copilot.',
+  title: 'BW Copilot Ops',
+  description: 'Internal operations console for the OpenClaw BW Copilot.',
 }
 
 export default function OpsPage() {

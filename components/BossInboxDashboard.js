@@ -126,6 +126,9 @@ function AttentionRow({
           {actionHint && (
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-cyan-100/80">
               <span>hint: {recommendedLabel}</span>
+              {actionHint?.expectedSuccess !== undefined && (
+                <span>success: {Math.round(Number(actionHint.expectedSuccess || 0) * 100)}%</span>
+              )}
               {actionHint?.recommendedOwner && <span>owner: {actionHint.recommendedOwner}</span>}
               {actionHint?.shouldBlock && <span className="text-rose-200">blocking</span>}
             </div>
@@ -458,6 +461,18 @@ function CandidatePatchRow({ item }) {
         <div className="mt-2 text-[11px] text-amber-200/80">
           gate: {item.evolutionStatusLabel}
           {item.autoApplyEligible ? ' / auto-eligible' : ''}
+          {item.autoApproveReady ? ' / auto-approve-ready' : ''}
+        </div>
+      )}
+      {item.canaryStatus && item.canaryStatus !== 'none' && (
+        <div className="mt-2 text-[11px] text-cyan-100/80">
+          canary: {item.canaryStatus}
+          {item.rollbackReason ? ` / ${item.rollbackReason}` : ''}
+        </div>
+      )}
+      {(item.didImproveScore !== undefined && item.didImproveScore !== null) && (
+        <div className="mt-2 text-[11px] text-cyan-100/80">
+          didImproveScore: {Number(item.didImproveScore).toFixed(3)}
         </div>
       )}
       {item.dryRunSummary && (
@@ -586,6 +601,7 @@ export default function BossInboxDashboard() {
   const growthSignals = payload?.growthSignals || []
   const candidatePatches = payload?.candidatePatches || []
   const governanceSummary = payload?.governanceSummary || null
+  const autonomyUpgradeAdvice = payload?.autonomyUpgradeAdvice || governanceSummary?.autonomyUpgradeAdvice || null
   const approvedCandidatePatches = candidatePatches.filter((item) => item.reviewStatus === 'approved')
   const pendingCandidatePatches = candidatePatches.filter((item) => (item.reviewStatus || 'pending') === 'pending')
   const approvedNotAppliedCandidatePatches = candidatePatches.filter((item) => item.reviewStatus === 'approved' && item.applyStatus !== 'applied')
@@ -717,12 +733,22 @@ export default function BossInboxDashboard() {
 
       {governanceSummary && (
         <div className="glass-card rounded-2xl p-4">
-          <div className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-8">
+          <div className="mb-3 text-xs text-cyan-100/80">
+            Evolution: {governanceSummary.autonomyLabel || `Level ${governanceSummary.autonomyLevel || 1}`}
+            {governanceSummary.autonomyKillSwitch ? ' / kill switch on' : ''}
+          </div>
+          <div className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-12">
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
               今日升格訊號 <span className="ml-2 font-display text-white">{governanceSummary.escalatedSignalsCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
               可處理商機 <span className="ml-2 font-display text-white">{governanceSummary.actionableOpportunityCount || 0}</span>
+            </div>
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              Auto-Approve Ready <span className="ml-2 font-display text-white">{governanceSummary.autoApproveReadyCount || 0}</span>
+            </div>
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              Auto-Approved 24h <span className="ml-2 font-display text-white">{governanceSummary.autoApproved24h || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
               未掛任務 <span className="ml-2 font-display text-white">{governanceSummary.openAttentionWithoutTask || 0}</span>
@@ -746,9 +772,28 @@ export default function BossInboxDashboard() {
               Auto Eligible <span className="ml-2 font-display text-white">{governanceSummary.candidateAutoEligible || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              Canary Running <span className="ml-2 font-display text-white">{governanceSummary.canaryOpenCount || 0}</span>
+            </div>
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              Auto Apply 7d <span className="ml-2 font-display text-white">{Math.round(Number(governanceSummary.autoApplySuccessRate7d || 0) * 100)}%</span>
+            </div>
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              Open Critical <span className="ml-2 font-display text-white">{governanceSummary.openCriticalAttentionCount || 0}</span>
+            </div>
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
               Digest Delivery <span className="ml-2 font-display text-white">{governanceSummary.digestDeliveryStatus || 'pending'}</span>
             </div>
           </div>
+          {autonomyUpgradeAdvice?.prompt && (
+            <div className="mt-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-100">
+              <div className="font-medium text-cyan-200">{autonomyUpgradeAdvice.prompt}</div>
+              {(autonomyUpgradeAdvice.reasons || []).length > 0 && (
+                <div className="mt-1 text-cyan-100/90">
+                  {(autonomyUpgradeAdvice.reasons || []).join(' / ')}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -843,11 +888,16 @@ export default function BossInboxDashboard() {
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
                   <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">今日進化</div>
                   <div className="mt-3 space-y-2 text-sm leading-6 text-cyan-100">
+                    <div>升級步驟：{digestEvolution.autonomyLabel || `Level ${digestEvolution.autonomyLevel || 1}`}{digestEvolution.autonomyKillSwitch ? ' / kill switch' : ''}</div>
                     <div>待審改進：{digestEvolution.candidatePatchCount || 0} 件</div>
                     <div>未解卡片：{digestEvolution.openAttentionCount || 0} 張</div>
                     <div>已掛任務：{digestEvolution.linkedTaskCount || 0} 張</div>
                     <div>已升格訊號：{digestEvolution.escalatedSignalsCount || 0} 張</div>
                     <div>待 apply：{digestEvolution.approvedNotAppliedCount || 0} 件</div>
+                    <div>24h 自動核准：{digestEvolution.autoApproved24h || 0} 件 / Canary：{digestEvolution.canaryOpenCount || 0} 件</div>
+                    {digestEvolution.autonomyUpgradeAdvice?.prompt && (
+                      <div>升級建議：{digestEvolution.autonomyUpgradeAdvice.prompt}</div>
+                    )}
                     <div>
                       24h 無新學習：
                       {(digestEvolution.staleAgents || []).length > 0

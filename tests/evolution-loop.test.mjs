@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -151,12 +151,20 @@ process.env.OPENCLAW_CONFIG_PATH = join(tempRoot, 'openclaw.json')
 process.env.OPENCLAW_OFFICE_DB_PATH = join(officeDir, 'office.db')
 process.chdir(officeDir)
 
-const { applyCandidatePatch, buildEvolutionAttentionItems, buildEvolutionSnapshot, reviewCandidatePatch, runNightlyEvolutionPromotion, syncEvolutionArtifacts, unapplyCandidatePatch } = await import('../lib/evolution.js')
+const { applyCandidatePatch, buildEvolutionAttentionItems, buildEvolutionSnapshot, getCandidatePatchById, reviewCandidatePatch, runNightlyEvolutionPromotion, syncEvolutionArtifacts, unapplyCandidatePatch } = await import('../lib/evolution.js')
 const { getAttentionStateById, getRequestById, getTaskById } = await import('../lib/db.js')
 const { buildBossInboxPayload, recordAttentionTaskFeedback, runAttentionAction } = await import('../lib/boss-inbox.js')
 const { reloadConfig } = await import('../lib/config.js')
 
 reloadConfig()
+
+function restoreEnv(key, value) {
+  if (value === undefined || value === null) {
+    delete process.env[key]
+  } else {
+    process.env[key] = value
+  }
+}
 
 test('syncEvolutionArtifacts writes events, learnings, and heartbeat state per active fish', () => {
   const result = syncEvolutionArtifacts({ now: Date.now() })
@@ -331,4 +339,273 @@ test('boss inbox keeps one evolution card per agent/type and can convert it into
   assert.ok(feedbackResult.length >= 1)
   assert.equal(getAttentionStateById('evolution:opportunity:seo')?.taskResult, '發佈 3 篇高意圖頁並補 CTA')
   assert.equal(getAttentionStateById('evolution:opportunity:seo')?.didImprove, true)
+})
+
+test('candidate preflight blocks non-whitelist scope and oversized line delta', () => {
+  const result = runNightlyEvolutionPromotion({ now: Date.now() })
+  const seoCandidate = result.candidatePatches.find((entry) => entry.agentId === 'seo')
+  assert.ok(seoCandidate)
+
+  const candidatePath = join(pendingDir, `${seoCandidate.id}.json`)
+  const outsideTarget = join(tmpdir(), `outside-risk-target-${Date.now()}.md`)
+  writeFileSync(outsideTarget, '# outside\n')
+
+  const outsidePayload = {
+    ...JSON.parse(readFileSync(candidatePath, 'utf8')),
+    target: outsideTarget,
+    reviewStatus: 'approved',
+  }
+  writeFileSync(candidatePath, `${JSON.stringify(outsidePayload, null, 2)}\n`)
+
+  const blockedByScope = getCandidatePatchById(seoCandidate.id)
+  assert.equal(blockedByScope?.evolutionStatus, 'blocked_by_missing_guard')
+  assert.equal(blockedByScope?.autoApplyEligible, false)
+  assert.ok((blockedByScope?.prereqChecks || []).some((check) => check.id === 'scope-whitelist' && check.passed === false))
+
+  const hugeChange = Array.from({ length: 180 }, (_value, index) => `line-${index + 1}`).join('\n')
+  const oversizePayload = {
+    ...JSON.parse(readFileSync(candidatePath, 'utf8')),
+    target: join(seoWorkspace, 'SYSTEM_PROMPT.md'),
+    proposedChange: hugeChange,
+  }
+  writeFileSync(candidatePath, `${JSON.stringify(oversizePayload, null, 2)}\n`)
+
+  const blockedByLineCap = getCandidatePatchById(seoCandidate.id)
+  assert.equal(blockedByLineCap?.evolutionStatus, 'blocked_by_missing_guard')
+  assert.ok((blockedByLineCap?.prereqChecks || []).some((check) => check.id === 'line-cap' && check.passed === false))
+})
+
+test('auto-applied candidate enters canary and rolls back on blocker/risk increase', () => {
+  const previousEnv = {
+    level: process.env.OPENCLAW_AUTONOMY_LEVEL,
+    maxApplyPerCycle: process.env.OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE,
+    maxApplyCritical: process.env.OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL,
+  }
+  try {
+    process.env.OPENCLAW_AUTONOMY_LEVEL = '2'
+    process.env.OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE = '99'
+    process.env.OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL = '99'
+    reloadConfig()
+
+    const now = Date.now()
+    const result = runNightlyEvolutionPromotion({ now })
+    const seoCandidate = result.candidatePatches.find((entry) => entry.agentId === 'seo')
+    assert.ok(seoCandidate)
+
+    const candidatePath = join(pendingDir, `${seoCandidate.id}.json`)
+    const resetCandidate = {
+      ...JSON.parse(readFileSync(candidatePath, 'utf8')),
+      applyStatus: null,
+      applyMode: null,
+      autoAppliedAt: null,
+      appliedAt: null,
+      appliedBy: null,
+      unappliedAt: null,
+      unappliedBy: null,
+      canaryStatus: 'none',
+      canaryStartedAt: null,
+      canaryDeadlineAt: null,
+      canaryUpdatedAt: null,
+      rollbackReason: null,
+      rollbackNeeded: false,
+    }
+    writeFileSync(candidatePath, `${JSON.stringify(resetCandidate, null, 2)}\n`)
+
+    reviewCandidatePatch({
+      id: seoCandidate.id,
+      reviewStatus: 'approved',
+      reviewer: 'test-suite',
+    })
+
+    buildEvolutionSnapshot({ now: now + 1000 })
+    const running = getCandidatePatchById(seoCandidate.id)
+    assert.equal(running?.applyStatus, 'applied')
+    assert.equal(running?.canaryStatus, 'running')
+
+    const seoEventsPath = join(seoWorkspace, '.learnings', 'events.jsonl')
+    appendFileSync(seoEventsPath, `${JSON.stringify({
+      id: `seo:canary-risk:${Date.now()}`,
+      version: 1,
+      agentId: 'seo',
+      runAt: Date.now(),
+      blockers: ['登入權限失敗導致流程中斷'],
+      qualityRegression: true,
+      learned: ['觀察到 canary 期間新增 blocker'],
+      nextTests: ['先處理 blocker 再重跑'],
+      commercialSignal: { category: 'data-backfill', score: 45, label: '資料回填缺口' },
+    })}\n`)
+
+    buildEvolutionSnapshot({ now: now + 5 * 60 * 1000 })
+    const rolledBack = getCandidatePatchById(seoCandidate.id)
+    assert.equal(rolledBack?.applyStatus, 'rolled_back')
+    assert.equal(rolledBack?.canaryStatus, 'rolled_back')
+    assert.ok(String(rolledBack?.rollbackReason || '').includes('blocked-risk') || String(rolledBack?.rollbackReason || '').includes('quality'))
+    const seoPromptAfterRollback = readFileSync(join(seoWorkspace, 'SYSTEM_PROMPT.md'), 'utf8')
+    assert.ok(!seoPromptAfterRollback.includes(`OPENCLAW_EVOLUTION_APPLY:START ${seoCandidate.id}`))
+  } finally {
+    restoreEnv('OPENCLAW_AUTONOMY_LEVEL', previousEnv.level)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE', previousEnv.maxApplyPerCycle)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL', previousEnv.maxApplyCritical)
+    reloadConfig()
+  }
+})
+
+test('autonomy level 2 can auto-approve low-risk pending candidates when policy gates pass', () => {
+  const previousEnv = {
+    level: process.env.OPENCLAW_AUTONOMY_LEVEL,
+    enabled: process.env.OPENCLAW_AUTO_APPROVE_ENABLED,
+    minConfidence: process.env.OPENCLAW_AUTO_APPROVE_MIN_CONFIDENCE,
+    minImpact: process.env.OPENCLAW_AUTO_APPROVE_MIN_IMPACT,
+    minSuccess: process.env.OPENCLAW_AUTO_APPROVE_MIN_SUCCESS_14D,
+    maxCritical: process.env.OPENCLAW_AUTO_APPROVE_MAX_OPEN_CRITICAL,
+    autoApplyMinSuccess7d: process.env.OPENCLAW_AUTO_APPLY_MIN_SUCCESS_7D,
+    autoApplyMaxCritical: process.env.OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL,
+    autoApplyMaxPerCycle: process.env.OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE,
+    kill: process.env.OPENCLAW_AUTONOMY_KILL_SWITCH,
+  }
+  try {
+    process.env.OPENCLAW_AUTONOMY_LEVEL = '2'
+    process.env.OPENCLAW_AUTO_APPROVE_ENABLED = '1'
+    process.env.OPENCLAW_AUTO_APPROVE_MIN_CONFIDENCE = '0.8'
+    process.env.OPENCLAW_AUTO_APPROVE_MIN_IMPACT = '70'
+    process.env.OPENCLAW_AUTO_APPROVE_MIN_SUCCESS_14D = '0.4'
+    process.env.OPENCLAW_AUTO_APPROVE_MAX_OPEN_CRITICAL = '99'
+    process.env.OPENCLAW_AUTO_APPLY_MIN_SUCCESS_7D = '0'
+    process.env.OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL = '99'
+    process.env.OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE = '99'
+    process.env.OPENCLAW_AUTONOMY_KILL_SWITCH = '0'
+    reloadConfig()
+
+    syncEvolutionArtifacts({ now: Date.now() })
+    const firstRun = runNightlyEvolutionPromotion({ now: Date.now() })
+
+    // Reset one candidate to pending so we can verify level-2 auto-approve deterministically.
+    const target = firstRun.candidatePatches.find((entry) => entry.agentId === 'seo')
+    assert.ok(target)
+    const candidatePath = join(pendingDir, `${target.id}.json`)
+    const resetCandidate = {
+      ...JSON.parse(readFileSync(candidatePath, 'utf8')),
+      reviewStatus: 'pending',
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNote: null,
+      applyStatus: null,
+      applyMode: null,
+      autoAppliedAt: null,
+      appliedAt: null,
+      appliedBy: null,
+      canaryStatus: 'none',
+      canaryStartedAt: null,
+      canaryDeadlineAt: null,
+      canaryUpdatedAt: null,
+      rollbackNeeded: false,
+      rollbackReason: null,
+      updatedAt: Date.now(),
+    }
+    writeFileSync(candidatePath, `${JSON.stringify(resetCandidate, null, 2)}\n`)
+
+    const secondRun = runNightlyEvolutionPromotion({ now: Date.now() + 1200 })
+    const autoApproved = secondRun.candidatePatches.find((entry) => entry.id === target.id)
+    assert.equal(autoApproved?.reviewStatus, 'approved')
+    assert.equal(autoApproved?.reviewedBy, 'evolution-engine:auto-approve')
+    assert.equal(autoApproved?.applyMode, 'auto')
+  } finally {
+    restoreEnv('OPENCLAW_AUTONOMY_LEVEL', previousEnv.level)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_ENABLED', previousEnv.enabled)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_MIN_CONFIDENCE', previousEnv.minConfidence)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_MIN_IMPACT', previousEnv.minImpact)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_MIN_SUCCESS_14D', previousEnv.minSuccess)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_MAX_OPEN_CRITICAL', previousEnv.maxCritical)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MIN_SUCCESS_7D', previousEnv.autoApplyMinSuccess7d)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL', previousEnv.autoApplyMaxCritical)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE', previousEnv.autoApplyMaxPerCycle)
+    restoreEnv('OPENCLAW_AUTONOMY_KILL_SWITCH', previousEnv.kill)
+    reloadConfig()
+  }
+})
+
+test('autonomy level 3 can auto-apply approved advisory candidate while level 2 keeps it waiting', () => {
+  const previousEnv = {
+    level: process.env.OPENCLAW_AUTONOMY_LEVEL,
+    enabled: process.env.OPENCLAW_AUTO_APPROVE_ENABLED,
+    allowApproveAdvisory: process.env.OPENCLAW_AUTO_APPROVE_ALLOW_ADVISORY,
+    allowApplyAdvisory: process.env.OPENCLAW_AUTO_APPLY_ALLOW_ADVISORY,
+    minApplyAdvisoryConfidence: process.env.OPENCLAW_AUTO_APPLY_ADVISORY_MIN_CONFIDENCE,
+    minApplyAdvisoryImpact: process.env.OPENCLAW_AUTO_APPLY_ADVISORY_MIN_IMPACT,
+    maxApplyCritical: process.env.OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL,
+    maxApplyPerCycle: process.env.OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE,
+  }
+  try {
+    process.env.OPENCLAW_AUTONOMY_LEVEL = '2'
+    process.env.OPENCLAW_AUTO_APPROVE_ENABLED = '1'
+    process.env.OPENCLAW_AUTO_APPROVE_ALLOW_ADVISORY = '0'
+    process.env.OPENCLAW_AUTO_APPLY_ALLOW_ADVISORY = '0'
+    process.env.OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL = '99'
+    process.env.OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE = '99'
+    reloadConfig()
+
+    syncEvolutionArtifacts({ now: Date.now() })
+    runNightlyEvolutionPromotion({ now: Date.now() })
+    const candidateId = `candidate-autonomy-advisory-${Date.now()}`
+    const candidatePath = join(pendingDir, `${candidateId}.json`)
+    const advisoryApproved = {
+      id: candidateId,
+      type: 'agent',
+      candidateKind: 'advisory',
+      agentId: 'seo',
+      agentName: '藍鯨SEO',
+      target: join(seoWorkspace, 'SYSTEM_PROMPT.md'),
+      reason: 'advisory candidate for level gating test',
+      proposedChange: '請把高意圖題群固定列入每日最優先內容策略。',
+      evidenceRefs: ['test:evidence:autonomy-advisory'],
+      category: 'high-intent-conversion',
+      recurrence: 1,
+      reviewStatus: 'approved',
+      reviewedAt: Date.now(),
+      reviewedBy: 'test-suite',
+      confidence: 0.95,
+      estimatedImpact: 92,
+      applyMode: null,
+      autoAppliedAt: null,
+      applyStatus: null,
+      appliedAt: null,
+      appliedBy: null,
+      canaryStatus: 'none',
+      canaryStartedAt: null,
+      canaryDeadlineAt: null,
+      canaryUpdatedAt: null,
+      rollbackNeeded: false,
+      rollbackReason: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    writeFileSync(candidatePath, `${JSON.stringify(advisoryApproved, null, 2)}\n`)
+
+    buildEvolutionSnapshot({ now: Date.now() + 1200 })
+    const keptWaiting = getCandidatePatchById(candidateId)
+    assert.equal(keptWaiting?.applyStatus, null)
+
+    process.env.OPENCLAW_AUTONOMY_LEVEL = '3'
+    process.env.OPENCLAW_AUTO_APPROVE_ALLOW_ADVISORY = '1'
+    process.env.OPENCLAW_AUTO_APPLY_ALLOW_ADVISORY = '1'
+    process.env.OPENCLAW_AUTO_APPLY_ADVISORY_MIN_CONFIDENCE = '0.88'
+    process.env.OPENCLAW_AUTO_APPLY_ADVISORY_MIN_IMPACT = '86'
+    reloadConfig()
+
+    buildEvolutionSnapshot({ now: Date.now() + 2600 })
+    const autoApplied = getCandidatePatchById(candidateId)
+    assert.equal(autoApplied?.applyStatus, 'applied')
+    assert.equal(autoApplied?.applyMode, 'auto')
+    assert.equal(autoApplied?.canaryStatus, 'running')
+  } finally {
+    restoreEnv('OPENCLAW_AUTONOMY_LEVEL', previousEnv.level)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_ENABLED', previousEnv.enabled)
+    restoreEnv('OPENCLAW_AUTO_APPROVE_ALLOW_ADVISORY', previousEnv.allowApproveAdvisory)
+    restoreEnv('OPENCLAW_AUTO_APPLY_ALLOW_ADVISORY', previousEnv.allowApplyAdvisory)
+    restoreEnv('OPENCLAW_AUTO_APPLY_ADVISORY_MIN_CONFIDENCE', previousEnv.minApplyAdvisoryConfidence)
+    restoreEnv('OPENCLAW_AUTO_APPLY_ADVISORY_MIN_IMPACT', previousEnv.minApplyAdvisoryImpact)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MAX_OPEN_CRITICAL', previousEnv.maxApplyCritical)
+    restoreEnv('OPENCLAW_AUTO_APPLY_MAX_PER_CYCLE', previousEnv.maxApplyPerCycle)
+    reloadConfig()
+  }
 })

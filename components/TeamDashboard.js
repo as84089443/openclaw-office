@@ -118,18 +118,70 @@ function AgentCard({ agent }) {
 
 export default function TeamDashboard() {
   const [agents, setAgents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [diagnostics, setDiagnostics] = useState({ warnings: [] })
+
   useEffect(() => {
-    Promise.all([
-      fetch('/api/config').then(r => r.json()),
-      fetch('/api/boss-inbox').then(r => r.json()),
-    ]).then(([config, inbox]) => {
-      const summaryMap = Object.fromEntries((inbox.agentSummaries || []).map((agent) => [agent.id, agent]))
-      setAgents((config.agents || []).map((agent) => enrichAgent({
-        ...agent,
-        ...summaryMap[agent.id],
-      })))
-    }).catch(() => {})
+    let cancelled = false
+
+    async function loadTeamDashboard() {
+      let nextError = ''
+      let nextDiagnostics = { warnings: [] }
+
+      try {
+        const configResponse = await fetch('/api/config')
+        const config = await configResponse.json().catch(() => ({}))
+        if (!configResponse.ok) {
+          throw new Error(config?.error || 'Config API unavailable')
+        }
+
+        nextDiagnostics = config.diagnostics || { warnings: [] }
+
+        let summaryMap = {}
+        try {
+          const inboxResponse = await fetch('/api/boss-inbox')
+          const inbox = await inboxResponse.json().catch(() => ({}))
+          if (!inboxResponse.ok) {
+            throw new Error(inbox?.error || 'Boss Inbox API unavailable')
+          }
+          summaryMap = Object.fromEntries((inbox.agentSummaries || []).map((agent) => [agent.id, agent]))
+        } catch (inboxError) {
+          nextError = inboxError.message || 'Boss Inbox API unavailable'
+        }
+
+        const nextAgents = (config.agents || []).map((agent) => enrichAgent({
+          ...agent,
+          ...summaryMap[agent.id],
+        }))
+
+        if (!nextAgents.length && !nextError) {
+          nextError = '目前沒有載入任何 canonical fish roster。'
+        }
+
+        if (!cancelled) {
+          setDiagnostics(nextDiagnostics)
+          setAgents(nextAgents)
+          setError(nextError)
+          setLoading(false)
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setDiagnostics(nextDiagnostics)
+          setAgents([])
+          setError(loadError.message || 'AI Team config unavailable')
+          setLoading(false)
+        }
+      }
+    }
+
+    loadTeamDashboard()
+    return () => {
+      cancelled = true
+    }
   }, [])
+
+  const warnings = diagnostics?.warnings || []
 
   return (
     <div className="space-y-6">
@@ -143,6 +195,41 @@ export default function TeamDashboard() {
       <p className="text-sm text-gray-500 -mt-4">
         🎧 Listening in on what the AI agents are thinking...
       </p>
+
+      {warnings.length > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
+          {warnings.map((warning) => warning.message).join(' ')}
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-300">
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((index) => (
+            <div key={index} className="glass-card rounded-xl p-4 animate-pulse">
+              <div className="mb-3 h-12 w-12 rounded-lg bg-gray-800" />
+              <div className="mb-2 h-5 w-32 rounded bg-gray-800" />
+              <div className="mb-4 h-16 rounded bg-gray-900/70" />
+              <div className="grid grid-cols-4 gap-2">
+                {[1, 2, 3, 4].map((cell) => (
+                  <div key={cell} className="h-12 rounded bg-gray-900/70" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && agents.length === 0 && (
+        <div className="glass-card rounded-xl border border-red-500/20 bg-red-500/5 p-5 text-sm text-gray-300">
+          AI Team 目前沒有可顯示的魚群。這通常代表部署端沒有載入正確的 `openclaw.json` roster。
+        </div>
+      )}
 
       {/* Agent cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

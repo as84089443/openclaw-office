@@ -376,6 +376,7 @@ export default function IsometricOffice({ activeRequest }) {
   const [savedAmount, setSavedAmount] = useState(null)
   const [agents, setAgents] = useState([])
   const [officeConfig, setOfficeConfig] = useState(null)
+  const [configError, setConfigError] = useState('')
   const [primaryAgentId, setPrimaryAgentId] = useState('main')
   const [agentAliases, setAgentAliases] = useState({ wickedman: 'main' })
 
@@ -391,8 +392,15 @@ export default function IsometricOffice({ activeRequest }) {
     
     // Load config from API
     fetch('/api/config')
-      .then(r => r.json())
+      .then(async (response) => {
+        const config = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(config?.error || 'Config API unavailable')
+        }
+        return config
+      })
       .then(config => {
+        setConfigError('')
         setOfficeConfig(config)
         setPrimaryAgentId(config.primaryAgentId || 'main')
         setAgentAliases(config.agentAliases || {})
@@ -402,6 +410,9 @@ export default function IsometricOffice({ activeRequest }) {
           ? rawAgents.map(a => ({ ...a, status: 'online' }))
           : Object.entries(rawAgents).map(([id, data]) => ({ id, ...data, status: 'online' }))
         setAgents(agentList)
+        if (!agentList.length) {
+          setConfigError('目前沒有載入 canonical fish roster，Legacy Office 只能顯示降級畫面。')
+        }
         // Build default positions from config
         // Generate fallback positions for all agents
         const generatedPositions = generateDefaultPositions(
@@ -415,7 +426,10 @@ export default function IsometricOffice({ activeRequest }) {
         const imgPositions = config.image?.positions || {}
         setLabelPositions(prev => ({ ...configPositions, ...imgPositions, ...prev }))
       })
-      .catch(e => console.error('Failed to load config:', e))
+      .catch(e => {
+        setConfigError(e.message || 'Failed to load office config')
+        console.error('Failed to load config:', e)
+      })
     
     // Load saved positions from localStorage
     const saved = localStorage.getItem('office-label-pos')
@@ -476,6 +490,7 @@ export default function IsometricOffice({ activeRequest }) {
   const processedChainReturns = useRef(new Set()) // Avoid duplicate return animations
   const animPositions = { external: { x: 10, y: 10 }, ...labelPositions }
   const agentMap = Object.fromEntries(agents.map((agent) => [agent.id, agent]))
+  const officeWarnings = officeConfig?.diagnostics?.warnings || []
 
   // Listen for chain_return events from activity stream
   useEffect(() => {
@@ -703,6 +718,19 @@ export default function IsometricOffice({ activeRequest }) {
           <span className="text-xs text-green-400 font-bold">💰 Saved: ${savedAmount !== null ? savedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '...'}</span>
         </div>
       </div>
+
+      {(configError || officeWarnings.length > 0) && (
+        <div className="absolute left-1/2 top-14 z-30 w-[min(92%,720px)] -translate-x-1/2 rounded-xl border border-amber-500/30 bg-black/75 px-4 py-3 text-sm text-amber-100 backdrop-blur-sm">
+          {configError && (
+            <div className="font-semibold">{configError}</div>
+          )}
+          {officeWarnings.length > 0 && (
+            <div className={configError ? 'mt-2 text-amber-50/90' : ''}>
+              {officeWarnings.map((warning) => warning.message).join(' ')}
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Working agents indicator */}
       {Object.keys(workingAgents).length > 0 && (

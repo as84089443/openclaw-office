@@ -51,7 +51,7 @@ process.env.OPENCLAW_HOME = tempRoot
 process.env.OPENCLAW_CONFIG_PATH = join(tempRoot, 'openclaw.json')
 process.env.OPENCLAW_OFFICE_DB_PATH = join(tempRoot, 'office.db')
 
-const { db, createRequest, createTask, getDailyDigestByDate } = await import('../lib/db.js')
+const { db, createRequest, createTask, getDailyDigestByDate, upsertAttentionState } = await import('../lib/db.js')
 const { buildBossInboxPayload, ensureDailyDigest, runAttentionAction } = await import('../lib/boss-inbox.js')
 const { getAgentsList, reloadConfig } = await import('../lib/config.js')
 
@@ -266,4 +266,68 @@ test('attention snooze and owner assignment update governance summary', () => {
   assert.equal(item?.assignedOwner, 'admin')
   assert.equal(item?.unresolved, false)
   assert.ok((payload.governanceSummary?.snoozedCount || 0) >= 1)
+})
+
+test('attentionActionHints learns from historical action outcomes and exposes expectedSuccess', () => {
+  const now = Date.now()
+  upsertAttentionState({
+    id: 'hint_seed_success',
+    source: 'evolution',
+    agentId: 'bizdev',
+    attentionType: 'blocked',
+    status: 'open',
+    signalCount: 2,
+    signalScoreMax: 90,
+    categories: ['delivery-flow'],
+    actionHistory: [{ action: 'create_task', at: now - 3000 }],
+    didImproveScore: 0.7,
+    lastFeedbackAt: now - 2000,
+    firstSeenAt: now - 5000,
+    lastSeenAt: now - 2000,
+    updatedAt: now - 1000,
+  })
+  upsertAttentionState({
+    id: 'hint_seed_fail',
+    source: 'evolution',
+    agentId: 'seo',
+    attentionType: 'blocked',
+    status: 'open',
+    signalCount: 2,
+    signalScoreMax: 88,
+    categories: ['delivery-flow'],
+    actionHistory: [{ action: 'acknowledge', at: now - 3000 }],
+    didImproveScore: -0.6,
+    rollbackNeeded: true,
+    lastFeedbackAt: now - 2000,
+    firstSeenAt: now - 5000,
+    lastSeenAt: now - 2000,
+    updatedAt: now - 1000,
+  })
+  upsertAttentionState({
+    id: 'hint_target',
+    source: 'evolution',
+    agentId: 'bizdev',
+    attentionType: 'blocked',
+    status: 'open',
+    signalCount: 1,
+    signalScoreMax: 86,
+    categories: ['delivery-flow'],
+    firstSeenAt: now - 1000,
+    lastSeenAt: now - 500,
+    updatedAt: now,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const targetHint = payload.attentionActionHints?.hint_target
+  assert.ok(targetHint)
+  assert.equal(targetHint.suggestedAction, 'create_task')
+  assert.ok(Number.isFinite(targetHint.expectedSuccess))
+  assert.ok(targetHint.expectedSuccess > 0.5)
+  assert.ok(Object.prototype.hasOwnProperty.call(payload.governanceSummary || {}, 'canaryOpenCount'))
+  assert.ok(Object.prototype.hasOwnProperty.call(payload.governanceSummary || {}, 'autoApplySuccessRate7d'))
+  assert.ok(Object.prototype.hasOwnProperty.call(payload.governanceSummary || {}, 'autonomyLevel'))
+  assert.ok(Object.prototype.hasOwnProperty.call(payload.governanceSummary || {}, 'autoApproveReadyCount'))
+  assert.ok(Object.prototype.hasOwnProperty.call(payload.governanceSummary || {}, 'openCriticalAttentionCount'))
+  assert.ok(Object.prototype.hasOwnProperty.call(payload || {}, 'autonomyUpgradeAdvice'))
+  assert.ok(['hold', 'upgrade', 'downgrade'].includes(payload.autonomyUpgradeAdvice?.direction))
 })

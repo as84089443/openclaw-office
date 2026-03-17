@@ -21,11 +21,14 @@ try {
   const candidateCount = result.candidatePatches?.length || 0
   const promotedCount = result.promotedPatterns?.length || 0
   const processedRuns = result.sync?.processedRuns || 0
+  const autonomyLabel = result.autonomyPolicy?.label || `Level ${result.autonomyPolicy?.level || 1}`
+  const killSwitch = result.autonomyPolicy?.killSwitch ? 'on' : 'off'
+  const autoApproved24h = result.autonomyMetrics?.autoApproved24h || 0
   const headline = candidateCount > 0
     ? `topCandidate=${result.candidatePatches[0].agentName || result.candidatePatches[0].agentId}/${result.candidatePatches[0].category}`
     : 'topCandidate=none'
 
-  writeLog(`memory distiller promoter syncedRuns=${processedRuns} candidates=${candidateCount} promoted=${promotedCount} ${headline}`)
+  writeLog(`memory distiller promoter syncedRuns=${processedRuns} candidates=${candidateCount} promoted=${promotedCount} autoApproved24h=${autoApproved24h} autonomy="${autonomyLabel}" killSwitch=${killSwitch} ${headline}`)
 
   if (candidateCount === 0 && promotedCount === 0) {
     process.stdout.write('no-op\n')

@@ -8,6 +8,7 @@ import {
   getAgentAliases,
   getPrimaryAgentId,
   getBossInboxConfig,
+  getConfigDiagnostics,
 } from '../../../lib/config.js'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const config = getConfig()
   const bossInbox = getBossInboxConfig()
+  const diagnostics = getConfigDiagnostics()
 
   const publicConfig = {
     office: config.office,
@@ -31,6 +33,7 @@ export async function GET() {
       home: config.openclaw?.home || null,
       configPath: config.openclaw?.configPath || null,
     },
+    diagnostics,
   }
 
   return Response.json(publicConfig)

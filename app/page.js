@@ -35,7 +35,7 @@ export default function HomePage() {
         <section className="glass-card rounded-[32px] p-8 md:p-10">
           <div className="max-w-4xl">
             <div className="mb-4 inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
-              OpenClaw F&B Copilot
+              OpenClaw BW Copilot
             </div>
             <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
               把店家面、營運面、舊版 office
