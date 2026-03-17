@@ -80,6 +80,112 @@ function emitTaskUpdate(taskId) {
   }
 }
 
+function taskProgressMeta(status, body = {}) {
+  if (status === 'assigned') {
+    return { milestone: '已指派', nextStep: '等待代理開始處理', continuationRequired: true, pendingAction: 'start_work', continuationCheckedAt: null, lastUpdate: Date.now() }
+  }
+  if (status === 'in_progress') {
+    return { milestone: '執行中', nextStep: '持續處理與回報里程碑', continuationRequired: false, pendingAction: null, continuationCheckedAt: null, completionGateRequired: true, lastUpdate: Date.now() }
+  }
+  if (status === 'completed') {
+    return { milestone: '已完成', nextStep: '等待你查看結果', continuationRequired: false, pendingAction: null, continuationCheckedAt: Date.now(), lastUpdate: Date.now() }
+  }
+  if (status === 'failed') {
+    return { milestone: '已卡住', nextStep: '等待人工介入或改走替代方案', continuationRequired: false, pendingAction: null, continuationCheckedAt: Date.now(), lastUpdate: Date.now() }
+  }
+  return {
+    milestone: body.milestone || null,
+    nextStep: body.nextStep || null,
+    lastUpdate: Date.now(),
+  }
+}
+
+async function notifyTaskMilestone(task, status) {
+  if (!task) return
+  const agentName = AGENTS[task.assignedAgent]?.name || task.assignedAgent || '代理'
+  const title = cleanContent(task.title || task.detail || task.requestId || task.id || '任務')
+  const summary = title.length > 60 ? `${title.slice(0, 60)}...` : title
+  let message = null
+
+  if (status === 'in_progress') {
+    message = `🧩 <b>任務開始</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
+  } else if (status === 'completed') {
+    message = `✅ <b>任務完成</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
+  } else if (status === 'failed') {
+    message = `⚠️ <b>任務卡住</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
+  } else if (status === 'stale') {
+    message = `⏰ <b>任務久未更新</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
+  }
+
+  if (message) {
+    try {
+      await sendTelegramNotification(message)
+    } catch (error) {
+      console.error('[workflow] milestone notify failed:', error.message)
+    }
+  }
+}
+
+const STALE_TASK_THRESHOLD_MS = 15 * 60 * 1000
+const STALE_TASK_SCAN_INTERVAL_MS = 60 * 1000
+const CONTINUATION_CHECK_MS = 45 * 1000
+const COMPLETION_GATE_CHECK_MS = 2 * 60 * 1000
+
+if (!globalThis.__officeStaleTaskMonitorStarted) {
+  globalThis.__officeStaleTaskMonitorStarted = true
+  setInterval(async () => {
+    try {
+      const now = Date.now()
+      const tasks = getActiveTasks(100)
+      for (const task of tasks) {
+        const updatedAt = Number(task.lastUpdate || task.startedAt || task.createdAt || 0)
+        if (!updatedAt) continue
+
+        if (task.status === 'assigned' && task.continuationRequired && (!task.continuationCheckedAt || now - Number(task.continuationCheckedAt) > CONTINUATION_CHECK_MS)) {
+          const patched = updateTask(task.id, {
+            status: 'in_progress',
+            startedAt: task.startedAt || now,
+            ...taskProgressMeta('in_progress'),
+            continuationRequired: false,
+            pendingAction: null,
+            continuationCheckedAt: now,
+          })
+          emitTaskUpdate(task.id)
+          await notifyTaskMilestone(patched || getTaskById(task.id), 'in_progress')
+          continue
+        }
+
+        if (task.status === 'in_progress' && task.completionGateRequired && (now - updatedAt > COMPLETION_GATE_CHECK_MS)) {
+          const patched = updateTask(task.id, {
+            continuationRequired: true,
+            pendingAction: 'continue_after_reply',
+            continuationCheckedAt: now,
+            completionGateRequired: false,
+            milestone: task.milestone || '持續執行中',
+            nextStep: task.nextStep || '里程碑回報後需自動續跑',
+            lastUpdate: updatedAt,
+          })
+          emitTaskUpdate(task.id)
+          continue
+        }
+
+        if (now - updatedAt < STALE_TASK_THRESHOLD_MS) continue
+        if (task.staleNotifiedAt && Number(task.staleNotifiedAt) >= updatedAt) continue
+        const patched = updateTask(task.id, {
+          staleNotifiedAt: now,
+          milestone: task.milestone || '等待更新',
+          nextStep: task.nextStep || '請補回最新進度',
+          lastUpdate: updatedAt,
+        })
+        emitTaskUpdate(task.id)
+        await notifyTaskMilestone(patched || task, 'stale')
+      }
+    } catch (error) {
+      console.error('[workflow] stale task monitor failed:', error.message)
+    }
+  }, STALE_TASK_SCAN_INTERVAL_MS)
+}
+
 // Keep request.state in sync with task.status for backward compatibility
 // This ensures the frontend (which reads request state) still works
 function syncRequestStateFromTask(task) {
@@ -131,14 +237,69 @@ function mergeAttentionMeta(...sources) {
   return meta
 }
 
-function normalizeCompletionFeedback({ success = true, body = {} } = {}) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function normalizeCompletionFeedback({ success = true, body = {}, task = null, taskTimeMs = null } = {}) {
   const completionValue = Number(body?.completionValue)
-  const rollbackNeeded = body?.rollbackNeeded === undefined ? false : Boolean(body.rollbackNeeded)
+  const completionValueNormalized = Number.isFinite(completionValue) ? completionValue : null
+  const explicitRollback = body?.rollbackNeeded === undefined ? null : Boolean(body.rollbackNeeded)
+  const reopenRate = Number(body?.reopenRate)
+  const reopenPenalty = Number.isFinite(reopenRate)
+    ? clamp(reopenRate, 0, 1)
+    : (Number(body?.reopenCount || 0) > 0 ? 0.5 : 0)
+  const rollbackRate = explicitRollback === true ? 1 : 0
+  const defaultSlaMs = Number(body?.expectedDurationMs)
+  const fallbackSlaMs = Number.isFinite(defaultSlaMs) && defaultSlaMs > 0 ? defaultSlaMs : (4 * 60 * 60 * 1000)
+  const elapsedMs = Number.isFinite(taskTimeMs) ? taskTimeMs : null
+  const timelinessScore = elapsedMs === null
+    ? (success ? 0.25 : -0.25)
+    : clamp(1 - (elapsedMs / fallbackSlaMs), -1, 1)
+  const processScore = clamp(
+    (timelinessScore * 0.6) +
+    ((success ? 0.3 : -0.5) * 0.4) -
+    (reopenPenalty * 0.5) -
+    (rollbackRate * 0.7),
+    -1,
+    1,
+  )
+
+  const businessDelta = Number(body?.businessDelta)
+  const effectiveBusinessDelta = Number.isFinite(businessDelta)
+    ? businessDelta
+    : (completionValueNormalized ?? 0)
+  const valueScore = clamp(effectiveBusinessDelta / 100000, -1, 1)
+  const recurringBlockerDelta = Number(body?.recurringBlockerDelta)
+  const blockerReliefScore = Number.isFinite(recurringBlockerDelta)
+    ? clamp((-recurringBlockerDelta) / 3, -1, 1)
+    : 0
+  const attentionType = String(body?.attentionType || task?.attentionType || '').toLowerCase()
+  const conversionBias = ['opportunity', 'decision'].includes(attentionType)
+    ? (success ? 0.35 : -0.35)
+    : (success ? 0.18 : -0.22)
+  const businessScore = clamp(
+    (valueScore * 0.65) +
+    (blockerReliefScore * 0.2) +
+    (conversionBias * 0.15),
+    -1,
+    1,
+  )
+
+  const providedDidImproveScore = Number(body?.didImproveScore)
+  const didImproveScore = Number.isFinite(providedDidImproveScore)
+    ? clamp(providedDidImproveScore, -1, 1)
+    : clamp((0.4 * processScore) + (0.6 * businessScore), -1, 1)
+  const rollbackNeeded = explicitRollback === null ? didImproveScore < 0 : explicitRollback
   const didImprove = body?.didImprove === undefined
-    ? Boolean(success && !rollbackNeeded)
+    ? didImproveScore >= 0.2
     : Boolean(body.didImprove)
   return {
-    completionValue: Number.isFinite(completionValue) ? completionValue : null,
+    completionValue: completionValueNormalized,
+    businessDelta: Number.isFinite(effectiveBusinessDelta) ? effectiveBusinessDelta : null,
+    processScore,
+    businessScore,
+    didImproveScore,
     didImprove,
     rollbackNeeded,
   }
@@ -149,6 +310,10 @@ function writeCompletionFeedbackToAttention({
   requestId,
   result,
   completionValue,
+  businessDelta,
+  processScore,
+  businessScore,
+  didImproveScore,
   didImprove,
   rollbackNeeded,
 }) {
@@ -158,6 +323,10 @@ function writeCompletionFeedbackToAttention({
       requestId: requestId || null,
       taskResult: result || null,
       completionValue,
+      businessDelta,
+      processScore,
+      businessScore,
+      didImproveScore,
       didImprove,
       rollbackNeeded,
       reviewer: 'workflow-api',
@@ -357,7 +526,7 @@ export async function POST(request) {
         setTimeout(() => {
           const t = getTaskById(task.id)
           if (!t || t.status === 'completed' || t.status === 'failed') return
-          updateTask(task.id, { status: 'assigned' })
+          updateTask(task.id, { status: 'assigned', ...taskProgressMeta('assigned') })
           updateRequest(req.id, { state: 'assigned', assignedTo: delegatedTo })
           createEvent(req.id, 'assigned', delegatedTo, `📧 ${AGENTS[delegatedTo]?.emoji || '🤖'} ${AGENTS[delegatedTo]?.name || delegatedTo} taking over`)
           emitRequestUpdate(req.id)
@@ -367,11 +536,12 @@ export async function POST(request) {
         setTimeout(() => {
           const t = getTaskById(task.id)
           if (!t || t.status === 'completed' || t.status === 'failed') return
-          updateTask(task.id, { status: 'in_progress', startedAt: Date.now() })
+          updateTask(task.id, { status: 'in_progress', startedAt: Date.now(), ...taskProgressMeta('in_progress') })
           syncRequestStateFromTask(getTaskById(task.id))
           createEvent(req.id, 'in_progress', delegatedTo, `⚡ ${AGENTS[delegatedTo]?.name || delegatedTo} working...`)
           emitRequestUpdate(req.id)
           emitTaskUpdate(task.id)
+          notifyTaskMilestone(getTaskById(task.id), 'in_progress')
         }, chainDelay + 3500)
       } else {
         // SELF-HANDLED: analyzing animation then WS handles rest
@@ -416,23 +586,33 @@ export async function POST(request) {
 
       const completedAt = Date.now()
       const taskTimeMs = task.startedAt ? completedAt - task.startedAt : 5000
-      const feedback = normalizeCompletionFeedback({ success, body })
+      const feedback = normalizeCompletionFeedback({ success, body, task, taskTimeMs })
       const completionResult = result || (success ? 'Completed' : 'Failed')
       
       updateTask(task.id, {
         status: success ? 'completed' : 'failed',
         completedAt,
+        ...taskProgressMeta(success ? 'completed' : 'failed'),
         result: completionResult,
         completionValue: feedback.completionValue,
+        businessDelta: feedback.businessDelta,
+        processScore: feedback.processScore,
+        businessScore: feedback.businessScore,
+        didImproveScore: feedback.didImproveScore,
         didImprove: feedback.didImprove,
         rollbackNeeded: feedback.rollbackNeeded,
       })
       emitTaskUpdate(task.id)
+      notifyTaskMilestone(getTaskById(task.id), success ? 'completed' : 'failed')
       writeCompletionFeedbackToAttention({
         taskId: task.id,
         requestId: task.requestId,
         result: completionResult,
         completionValue: feedback.completionValue,
+        businessDelta: feedback.businessDelta,
+        processScore: feedback.processScore,
+        businessScore: feedback.businessScore,
+        didImproveScore: feedback.didImproveScore,
         didImprove: feedback.didImprove,
         rollbackNeeded: feedback.rollbackNeeded,
       })
@@ -497,14 +677,19 @@ export async function POST(request) {
 
       const completedAt = Date.now()
       const taskTimeMs = task.startedAt ? completedAt - task.startedAt : 5000
-      const feedback = normalizeCompletionFeedback({ success, body })
+      const feedback = normalizeCompletionFeedback({ success, body, task, taskTimeMs })
       const completionResult = result || (success ? 'Completed' : 'Failed')
 
       updateTask(task.id, {
         status: success ? 'completed' : 'failed',
         completedAt,
+        ...taskProgressMeta(success ? 'completed' : 'failed'),
         result: completionResult,
         completionValue: feedback.completionValue,
+        businessDelta: feedback.businessDelta,
+        processScore: feedback.processScore,
+        businessScore: feedback.businessScore,
+        didImproveScore: feedback.didImproveScore,
         didImprove: feedback.didImprove,
         rollbackNeeded: feedback.rollbackNeeded,
       })
@@ -514,6 +699,10 @@ export async function POST(request) {
         requestId: task.requestId,
         result: completionResult,
         completionValue: feedback.completionValue,
+        businessDelta: feedback.businessDelta,
+        processScore: feedback.processScore,
+        businessScore: feedback.businessScore,
+        didImproveScore: feedback.didImproveScore,
         didImprove: feedback.didImprove,
         rollbackNeeded: feedback.rollbackNeeded,
       })
@@ -659,12 +848,23 @@ export async function POST(request) {
           const completedAt = Date.now()
           const taskTimeMs = t?.startedAt ? completedAt - t.startedAt : workDurationMs
           const completionResult = 'Auto completed'
+          const feedback = normalizeCompletionFeedback({
+            success: true,
+            body: { didImprove: true, rollbackNeeded: false, completionValue: null },
+            task: t,
+            taskTimeMs,
+          })
           updateTask(task.id, {
             status: 'completed',
             completedAt,
             result: completionResult,
-            didImprove: true,
-            rollbackNeeded: false,
+            completionValue: feedback.completionValue,
+            businessDelta: feedback.businessDelta,
+            processScore: feedback.processScore,
+            businessScore: feedback.businessScore,
+            didImproveScore: feedback.didImproveScore,
+            didImprove: feedback.didImprove,
+            rollbackNeeded: feedback.rollbackNeeded,
           })
           syncRequestStateFromTask(getTaskById(task.id))
           emitRequestUpdate(requestId)
@@ -673,9 +873,13 @@ export async function POST(request) {
             taskId: task.id,
             requestId,
             result: completionResult,
-            completionValue: null,
-            didImprove: true,
-            rollbackNeeded: false,
+            completionValue: feedback.completionValue,
+            businessDelta: feedback.businessDelta,
+            processScore: feedback.processScore,
+            businessScore: feedback.businessScore,
+            didImproveScore: feedback.didImproveScore,
+            didImprove: feedback.didImprove,
+            rollbackNeeded: feedback.rollbackNeeded,
           })
           recordTaskCompletion(agent, taskTimeMs)
           incrementMessages('sent')
@@ -729,17 +933,21 @@ export async function POST(request) {
       
       const completedAt = Date.now()
       const taskTimeMs = req.workStartedAt ? completedAt - req.workStartedAt : 5000
-      const feedback = normalizeCompletionFeedback({ success: true, body })
+      const task = getTaskByRequestId(requestId)
+      const feedback = normalizeCompletionFeedback({ success: true, body, task, taskTimeMs })
       const completionResult = result || 'Completed'
       
       // Complete the task if one exists
-      const task = getTaskByRequestId(requestId)
       if (task && task.status !== 'completed' && task.status !== 'failed') {
         updateTask(task.id, {
           status: 'completed',
           completedAt,
           result: completionResult,
           completionValue: feedback.completionValue,
+          businessDelta: feedback.businessDelta,
+          processScore: feedback.processScore,
+          businessScore: feedback.businessScore,
+          didImproveScore: feedback.didImproveScore,
           didImprove: feedback.didImprove,
           rollbackNeeded: feedback.rollbackNeeded,
         })
@@ -749,6 +957,10 @@ export async function POST(request) {
           requestId,
           result: completionResult,
           completionValue: feedback.completionValue,
+          businessDelta: feedback.businessDelta,
+          processScore: feedback.processScore,
+          businessScore: feedback.businessScore,
+          didImproveScore: feedback.didImproveScore,
           didImprove: feedback.didImprove,
           rollbackNeeded: feedback.rollbackNeeded,
         })
@@ -759,6 +971,10 @@ export async function POST(request) {
           requestId,
           result: completionResult,
           completionValue: feedback.completionValue,
+          businessDelta: feedback.businessDelta,
+          processScore: feedback.processScore,
+          businessScore: feedback.businessScore,
+          didImproveScore: feedback.didImproveScore,
           didImprove: feedback.didImprove,
           rollbackNeeded: feedback.rollbackNeeded,
         })
@@ -789,17 +1005,21 @@ export async function POST(request) {
       
       const completedAt = Date.now()
       const taskTimeMs = req.workStartedAt ? completedAt - req.workStartedAt : 5000
-      const feedback = normalizeCompletionFeedback({ success: true, body })
+      const task = getTaskByRequestId(requestId)
+      const feedback = normalizeCompletionFeedback({ success: true, body, task, taskTimeMs })
       const completionResult = result || 'Done'
       
       // Complete associated task
-      const task = getTaskByRequestId(requestId)
       if (task && task.status !== 'completed' && task.status !== 'failed') {
         updateTask(task.id, {
           status: 'completed',
           completedAt,
           result: completionResult,
           completionValue: feedback.completionValue,
+          businessDelta: feedback.businessDelta,
+          processScore: feedback.processScore,
+          businessScore: feedback.businessScore,
+          didImproveScore: feedback.didImproveScore,
           didImprove: feedback.didImprove,
           rollbackNeeded: feedback.rollbackNeeded,
         })
@@ -809,6 +1029,10 @@ export async function POST(request) {
           requestId,
           result: completionResult,
           completionValue: feedback.completionValue,
+          businessDelta: feedback.businessDelta,
+          processScore: feedback.processScore,
+          businessScore: feedback.businessScore,
+          didImproveScore: feedback.didImproveScore,
           didImprove: feedback.didImprove,
           rollbackNeeded: feedback.rollbackNeeded,
         })
@@ -819,6 +1043,10 @@ export async function POST(request) {
           requestId,
           result: completionResult,
           completionValue: feedback.completionValue,
+          businessDelta: feedback.businessDelta,
+          processScore: feedback.processScore,
+          businessScore: feedback.businessScore,
+          didImproveScore: feedback.didImproveScore,
           didImprove: feedback.didImprove,
           rollbackNeeded: feedback.rollbackNeeded,
         })
@@ -914,7 +1142,7 @@ export async function POST(request) {
       if (!req || !req.task) return Response.json({ error: 'Request/task not found' }, { status: 404 })
       updateRequest(requestId, { state: 'assigned', assignedTo: req.task.targetAgent })
       const task = getTaskByRequestId(requestId)
-      if (task) { updateTask(task.id, { status: 'assigned' }); emitTaskUpdate(task.id) }
+      if (task) { updateTask(task.id, { status: 'assigned', ...taskProgressMeta('assigned') }); emitTaskUpdate(task.id) }
       emitRequestUpdate(requestId)
       const isSelf = req.task.targetAgent === 'wickedman'
       createEvent(req.id, 'assigned', 'wickedman', isSelf ? `📧 Taking this one myself: "${req.task.title}"` : `📧 Delegating to ${AGENTS[req.task.targetAgent]?.name}: "${req.task.title}"`, { targetAgent: req.task.targetAgent })
@@ -927,7 +1155,7 @@ export async function POST(request) {
       if (!req) return Response.json({ error: 'Request not found' }, { status: 404 })
       updateRequest(requestId, { state: 'in_progress', workStartedAt: Date.now() })
       const task = getTaskByRequestId(requestId)
-      if (task) { updateTask(task.id, { status: 'in_progress', startedAt: Date.now() }); emitTaskUpdate(task.id) }
+      if (task) { updateTask(task.id, { status: 'in_progress', startedAt: Date.now(), ...taskProgressMeta('in_progress') }); emitTaskUpdate(task.id); notifyTaskMilestone(getTaskById(task.id), 'in_progress') }
       emitRequestUpdate(requestId)
       createEvent(req.id, 'in_progress', req.assignedTo, `⚡ Working on: "${req.task?.title}"`)
       return Response.json({ success: true, request: getRequestById(requestId), agent: req.assignedTo, stateConfig: STATE_CONFIG.in_progress })

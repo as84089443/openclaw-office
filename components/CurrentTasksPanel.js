@@ -32,6 +32,7 @@ function formatTime(ts) {
 
 export default function CurrentTasksPanel() {
   const [tasks, setTasks] = useState([])
+  const [devSessions, setDevSessions] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -39,10 +40,15 @@ export default function CurrentTasksPanel() {
 
     const fetchTasks = async () => {
       try {
-        const res = await fetch('/api/workflow?type=tasks&active=true&limit=8')
-        const data = await res.json()
+        const [tasksRes, sessionsRes] = await Promise.all([
+          fetch('/api/workflow?type=tasks&active=true&limit=8'),
+          fetch('/api/dev-sessions'),
+        ])
+        const tasksData = await tasksRes.json()
+        const sessionsData = await sessionsRes.json()
         if (!alive) return
-        setTasks(data.tasks || [])
+        setTasks(tasksData.tasks || [])
+        setDevSessions(sessionsData.sessions || [])
       } catch (error) {
         console.error('Failed to fetch current tasks:', error)
       } finally {
@@ -58,7 +64,7 @@ export default function CurrentTasksPanel() {
     }
   }, [])
 
-  const activeCount = useMemo(() => tasks.length, [tasks])
+  const activeCount = useMemo(() => tasks.length + devSessions.length, [tasks.length, devSessions.length])
 
   return (
     <motion.div
@@ -77,56 +83,95 @@ export default function CurrentTasksPanel() {
       <div className="p-3 space-y-3 max-h-[420px] overflow-y-auto">
         {loading ? (
           <div className="text-sm text-gray-500">讀取中…</div>
-        ) : tasks.length === 0 ? (
+        ) : (tasks.length === 0 && devSessions.length === 0) ? (
           <div className="rounded-lg border border-gray-800 bg-black/20 p-3 text-sm text-gray-500">
             目前沒有進行中的任務
           </div>
         ) : (
-          tasks.map((task) => {
-            const status = STATUS_MAP[task.status] || STATUS_MAP.in_progress
-            const summary = task.title || task.detail || task.requestId || task.id
-            const detail = task.detail && task.detail !== task.title ? task.detail : null
-            return (
-              <Link
-                key={task.id}
-                href={`/office/tasks/${task.id}`}
-                className="block rounded-lg border border-gray-800 bg-black/20 p-3 transition hover:border-cyan-500/40 hover:bg-cyan-950/10"
+          <>
+            {devSessions.map((session) => (
+              <div
+                key={`session-${session.id}`}
+                className="rounded-lg border border-fuchsia-800/60 bg-fuchsia-950/10 p-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-white">{summary}</div>
-                    {detail ? <div className="mt-1 line-clamp-2 text-xs text-gray-400">{detail}</div> : null}
+                    <div className="truncate text-sm font-semibold text-white">{session.title || session.sessionKey}</div>
+                    {session.detail ? <div className="mt-1 line-clamp-2 text-xs text-gray-400">{session.detail}</div> : null}
                   </div>
-                  <div className={`shrink-0 text-xs ${status.color}`}>{status.label}</div>
+                  <div className="shrink-0 text-xs text-fuchsia-300">開發中</div>
                 </div>
 
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-800">
-                  <div className="h-full rounded-full bg-cyan-400" style={{ width: `${status.progress}%` }} />
+                  <div className="h-full rounded-full bg-fuchsia-400" style={{ width: '65%' }} />
                 </div>
 
                 <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                   <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${status.dot}`} />
-                    <span>{formatAgent(task.assignedAgent)}</span>
+                    <span className="h-2 w-2 rounded-full bg-fuchsia-400" />
+                    <span>{session.channel || 'openclaw session'}</span>
                   </div>
-                  <span>{status.progress}%</span>
+                  <span>LIVE</span>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                  <span>{status.next}</span>
-                  <span>{formatTime(task.startedAt || task.createdAt)}</span>
+                  <span>最新開發動作</span>
+                  <span>{formatTime(session.updatedAt)}</span>
                 </div>
+              </div>
+            ))}
 
-                {(task.needsDecision || task.rollbackNeeded || task.attentionType) ? (
-                  <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                    {task.needsDecision ? <span className="rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-1 text-yellow-300">待你決策</span> : null}
-                    {task.rollbackNeeded ? <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-300">阻塞/需處理</span> : null}
-                    {task.attentionType ? <span className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2 py-1 text-purple-300">{task.attentionType}</span> : null}
+            {tasks.map((task) => {
+              const status = STATUS_MAP[task.status] || STATUS_MAP.in_progress
+              const summary = task.title || task.detail || task.requestId || task.id
+              const detail = task.detail && task.detail !== task.title ? task.detail : null
+              const milestone = task.milestone || status.label
+              const nextStep = task.nextStep || status.next
+              const updatedAt = task.lastUpdate || task.completedAt || task.startedAt || task.createdAt
+              const stale = updatedAt ? (Date.now() - Number(updatedAt) > 24 * 60 * 60 * 1000) : false
+              return (
+                <Link
+                  key={task.id}
+                  href={`/office/tasks/${task.id}`}
+                  className="block rounded-lg border border-gray-800 bg-black/20 p-3 transition hover:border-cyan-500/40 hover:bg-cyan-950/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-white">{summary}</div>
+                      {detail ? <div className="mt-1 line-clamp-2 text-xs text-gray-400">{detail}</div> : null}
+                    </div>
+                    <div className={`shrink-0 text-xs ${status.color}`}>{milestone}</div>
                   </div>
-                ) : null}
-              </Link>
-            )
-          })
+
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-800">
+                    <div className="h-full rounded-full bg-cyan-400" style={{ width: `${status.progress}%` }} />
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${status.dot}`} />
+                      <span>{formatAgent(task.assignedAgent)}</span>
+                    </div>
+                    <span>{status.progress}%</span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                    <span>{nextStep}</span>
+                    <span>{formatTime(updatedAt)}</span>
+                  </div>
+
+                  {(task.needsDecision || task.rollbackNeeded || task.attentionType || stale) ? (
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                      {task.needsDecision ? <span className="rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-1 text-yellow-300">待你決策</span> : null}
+                      {task.rollbackNeeded ? <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-300">阻塞/需處理</span> : null}
+                      {stale ? <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-300">過久未更新</span> : null}
+                      {task.attentionType ? <span className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2 py-1 text-purple-300">{task.attentionType}</span> : null}
+                    </div>
+                  ) : null}
+                </Link>
+              )
+            })}
+          </>
         )}
       </div>
     </motion.div>

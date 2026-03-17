@@ -4,6 +4,7 @@
 import { 
   getTodayStats, 
   getAllTimeStats, 
+  db,
 } from '../../../lib/db'
 import { 
   getTodayTokens, 
@@ -11,10 +12,38 @@ import {
   calculateOpenClawCost 
 } from '../../../lib/openclaw'
 
+function getTodayDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function getTodayStatsReadOnly() {
+  const today = getTodayDate()
+  const row = db.prepare('SELECT * FROM daily_stats WHERE date = ?').get(today)
+  return row || {
+    messages_received: 0,
+    messages_sent: 0,
+    tokens_input: 0,
+    tokens_output: 0,
+    tasks_completed: 0,
+    total_task_time_ms: 0,
+    estimated_human_time_ms: 0,
+    savings_myr: 0,
+  }
+}
+
 export async function GET() {
   try {
     // Get SQLite stats (messages, tasks, savings)
-    const today = getTodayStats()
+    let today
+    try {
+      today = getTodayStats()
+    } catch (error) {
+      if (String(error.message || '').includes('readonly')) {
+        today = getTodayStatsReadOnly()
+      } else {
+        throw error
+      }
+    }
     const allTime = getAllTimeStats()
     
     // Get real token usage from OpenClaw
