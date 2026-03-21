@@ -89,5 +89,7 @@ npm run test:e2e:report
 ## 部署
 
 - Render Blueprint: `render.yaml`
+- `as84089443` 遷移用 Blueprint: `render.as84089443.yaml`
 - 建議網域：`copilot.bw-space.com`
 - 正式上線前請完成 LINE 與 Google OAuth 外部設定。
+- 遷移執行清單：[`docs/render-migration-as84089443.md`](/Users/brian/.openclaw/openclaw-office/docs/render-migration-as84089443.md)
