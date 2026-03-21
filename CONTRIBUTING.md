@@ -5,7 +5,7 @@ Thanks for your interest in contributing! Here's how to get started.
 ## Development Setup
 
 ```bash
-git clone https://github.com/wickedapp/openclaw-office
+git clone https://github.com/as84089443/openclaw-office
 cd openclaw-office
 npm install
 cp .env.example .env.local
