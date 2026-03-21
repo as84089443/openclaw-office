@@ -21,15 +21,25 @@
 - `runtime/.env.production`
 - `runtime/openclaw.json`
 - `runtime/openclaw-office.config.json`
+- `runtime/openclaw-state/device.json`
+- `runtime/openclaw-state/device-auth.json`
 - `runtime/cloudflared/config.yml`
 - `runtime/cloudflared/<tunnel-id>.json`
 
 其中：
 
 - `OPENCLAW_HOME=/app/runtime`
+- `OPENCLAW_DIR=/app/runtime/openclaw-state`
 - `OPENCLAW_OFFICE_CONFIG_PATH=/app/runtime/openclaw-office.config.json`
 
 不要把 `OPENCLAW_CONFIG_JSON` / `OPENCLAW_OFFICE_CONFIG_JSON` 設成檔案路徑，因為這兩個環境變數會被當成原始 JSON 字串解析。
+
+如果 live 站要接回真實 OpenClaw Gateway，即時互動不走降級模式，記得把本機 `~/.openclaw/identity/` 的：
+
+- `device.json`
+- `device-auth.json`
+
+同步到 `runtime/openclaw-state/`。
 
 ## 啟動
 
@@ -64,3 +74,4 @@ docker logs --tail 50 openclaw-copilot-tunnel
 - 公網入口可接 Cloudflare Tunnel、Synology Reverse Proxy 或既有網域代理。
 - 若使用 Cloudflare Tunnel，建議把 `copilot` 入口做成獨立 tunnel，避免和其他本機服務共用同一條 ingress 設定。
 - 若之後要把 SQLite 升到 Postgres，可以只調整 env 與 compose，不必重改 app。
+- 若要長期維運，建議再搭配每日備份與保守自動更新腳本。
