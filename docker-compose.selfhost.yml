@@ -13,8 +13,8 @@ services:
       NODE_ENV: production
       PORT: 4200
       NEXT_TELEMETRY_DISABLED: 1
-      OPENCLAW_CONFIG_JSON: /app/runtime/openclaw.json
-      OPENCLAW_OFFICE_CONFIG_JSON: /app/runtime/openclaw-office.config.json
+      OPENCLAW_HOME: /app/runtime
+      OPENCLAW_OFFICE_CONFIG_PATH: /app/runtime/openclaw-office.config.json
       OPENCLAW_OFFICE_DB_PATH: /app/data/openclaw-office.db
       FNB_SQLITE_PATH: /app/data/openclaw-office.db
     volumes:
@@ -22,4 +22,3 @@ services:
       - ./runtime/openclaw.json:/app/runtime/openclaw.json:ro
       - ./runtime/openclaw-office.config.json:/app/runtime/openclaw-office.config.json:ro
       - ./public/sprites:/app/public/sprites:ro
-

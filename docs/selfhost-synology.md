@@ -21,6 +21,13 @@
 - `runtime/openclaw.json`
 - `runtime/openclaw-office.config.json`
 
+其中：
+
+- `OPENCLAW_HOME=/app/runtime`
+- `OPENCLAW_OFFICE_CONFIG_PATH=/app/runtime/openclaw-office.config.json`
+
+不要把 `OPENCLAW_CONFIG_JSON` / `OPENCLAW_OFFICE_CONFIG_JSON` 設成檔案路徑，因為這兩個環境變數會被當成原始 JSON 字串解析。
+
 ## 啟動
 
 ```bash
