@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Building2, MessageCircleMore, Store } from 'lucide-react'
+import { ArrowRight, Building2, MessageCircleMore, Store, TerminalSquare } from 'lucide-react'
 
 const entryPoints = [
   {
@@ -26,6 +26,14 @@ const entryPoints = [
     accent: '#ffb703',
     icon: Building2,
   },
+  {
+    href: '/browser',
+    title: 'Browser Runtime',
+    subtitle: 'Chrome / MCP / CLI',
+    description: '檢查 real Chrome bridge、CDP targets 與常用 browser 指令，不用回頭翻文件。',
+    accent: '#9d4edd',
+    icon: TerminalSquare,
+  },
 ]
 
 export default function HomePage() {
@@ -48,7 +56,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {entryPoints.map((entry) => (
             <Link
               key={entry.href}
@@ -80,7 +88,8 @@ export default function HomePage() {
             <div className="mt-4 space-y-3 text-sm leading-7 text-gray-300">
               <p>1. 先看 `/merchant`，確認店家真正看到的操作負擔夠低。</p>
               <p>2. 再看 `/ops`，確認 autopilot、例外與成效能被內部接住。</p>
-              <p>3. `/office` 只留給原本 OpenClaw 流程，不再當產品主入口。</p>
+              <p>3. `/browser` 用來檢查 Chrome bridge 與複製正確 browser 指令。</p>
+              <p>4. `/office` 只留給原本 OpenClaw 流程，不再當產品主入口。</p>
             </div>
           </div>
 

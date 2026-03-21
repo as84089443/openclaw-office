@@ -33,6 +33,7 @@ function formatTime(ts) {
 export default function CurrentTasksPanel() {
   const [tasks, setTasks] = useState([])
   const [devSessions, setDevSessions] = useState([])
+  const [sessionCategories, setSessionCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function CurrentTasksPanel() {
         if (!alive) return
         setTasks(tasksData.tasks || [])
         setDevSessions(sessionsData.sessions || [])
+        setSessionCategories(sessionsData.categories || [])
       } catch (error) {
         console.error('Failed to fetch current tasks:', error)
       } finally {
@@ -65,6 +67,44 @@ export default function CurrentTasksPanel() {
   }, [])
 
   const activeCount = useMemo(() => tasks.length + devSessions.length, [tasks.length, devSessions.length])
+  const groupedSessions = useMemo(() => {
+    const categories = Array.isArray(sessionCategories) ? sessionCategories : []
+    const byAgentId = new Map()
+    for (const session of devSessions) {
+      const agentId = session.agentId || session.storedAgentId || 'unassigned'
+      const current = byAgentId.get(agentId) || []
+      current.push(session)
+      byAgentId.set(agentId, current)
+    }
+
+    const groups = categories.map((category) => ({
+      ...category,
+      sessions: byAgentId.get(category.agentId) || [],
+    }))
+
+    for (const [agentId, sessions] of byAgentId.entries()) {
+      if (groups.some((group) => group.agentId === agentId)) continue
+      const first = sessions[0] || {}
+      groups.push({
+        agentId,
+        name: first.agentName || agentId,
+        emoji: first.agentEmoji || '🤖',
+        sessionCount: sessions.length,
+        sessions,
+      })
+    }
+
+    return groups
+      .filter((group) => group.sessions.length > 0)
+      .sort((a, b) => {
+        if ((b.sessionCount || 0) !== (a.sessionCount || 0)) return (b.sessionCount || 0) - (a.sessionCount || 0)
+        return String(a.name || '').localeCompare(String(b.name || ''))
+      })
+  }, [devSessions, sessionCategories])
+  const emptyCategoryCount = useMemo(
+    () => sessionCategories.filter((category) => !category.sessionCount).length,
+    [sessionCategories],
+  )
 
   return (
     <motion.div
@@ -89,37 +129,61 @@ export default function CurrentTasksPanel() {
           </div>
         ) : (
           <>
-            {devSessions.map((session) => (
-              <div
-                key={`session-${session.id}`}
-                className="rounded-lg border border-fuchsia-800/60 bg-fuchsia-950/10 p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-white">{session.title || session.sessionKey}</div>
-                    {session.detail ? <div className="mt-1 line-clamp-2 text-xs text-gray-400">{session.detail}</div> : null}
-                  </div>
-                  <div className="shrink-0 text-xs text-fuchsia-300">開發中</div>
-                </div>
-
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-800">
-                  <div className="h-full rounded-full bg-fuchsia-400" style={{ width: '65%' }} />
-                </div>
-
-                <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+            {groupedSessions.map((group) => (
+              <div key={`session-group-${group.agentId}`} className="space-y-2">
+                <div className="flex items-center justify-between px-1 text-[11px] uppercase tracking-[0.18em] text-fuchsia-200/70">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-fuchsia-400" />
-                    <span>{session.channel || 'openclaw session'}</span>
+                    <span>{group.emoji || '🤖'}</span>
+                    <span>{group.name || group.agentId}</span>
                   </div>
-                  <span>LIVE</span>
+                  <span>{group.sessions.length} 個對話</span>
                 </div>
 
-                <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                  <span>最新開發動作</span>
-                  <span>{formatTime(session.updatedAt)}</span>
-                </div>
+                {group.sessions.map((session) => (
+                  <div
+                    key={`session-${session.id}`}
+                    className="rounded-lg border border-fuchsia-800/60 bg-fuchsia-950/10 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-white">{session.title || session.sessionKey}</div>
+                        {session.detail ? <div className="mt-1 line-clamp-2 text-xs text-gray-400">{session.detail}</div> : null}
+                      </div>
+                      <div className="shrink-0 text-xs text-fuchsia-300">開發中</div>
+                    </div>
+
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-800">
+                      <div className="h-full rounded-full bg-fuchsia-400" style={{ width: '65%' }} />
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-fuchsia-400" />
+                        <span>{session.channel || 'openclaw session'}</span>
+                      </div>
+                      <span>LIVE</span>
+                    </div>
+
+                    {session.storedAgentId && session.agentId && session.storedAgentId !== session.agentId ? (
+                      <div className="mt-2 text-[11px] text-amber-300/80">
+                        legacy session key: {session.storedAgentId} → {session.agentId}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                      <span>最新開發動作</span>
+                      <span>{formatTime(session.updatedAt)}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
+
+            {emptyCategoryCount > 0 ? (
+              <div className="rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-xs text-gray-500">
+                其餘 {emptyCategoryCount} 條魚已建立對話分類，尚無 live 對話。
+              </div>
+            ) : null}
 
             {tasks.map((task) => {
               const status = STATUS_MAP[task.status] || STATUS_MAP.in_progress

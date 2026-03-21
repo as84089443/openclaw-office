@@ -16,6 +16,9 @@ function NavBar() {
           <a href="/ops" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
             Ops
           </a>
+          <a href="/browser" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
+            Browser
+          </a>
           <a href="/office" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
             Office
           </a>
