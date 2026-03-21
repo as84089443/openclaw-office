@@ -90,6 +90,8 @@ npm run test:e2e:report
 
 - Render Blueprint: `render.yaml`
 - `as84089443` 遷移用 Blueprint: `render.as84089443.yaml`
+- 免費版 Blueprint（不含付費 worker）: `render.as84089443.hobby.yaml`
 - 建議網域：`copilot.bw-space.com`
 - 正式上線前請完成 LINE 與 Google OAuth 外部設定。
 - 遷移執行清單：[`docs/render-migration-as84089443.md`](/Users/brian/.openclaw/openclaw-office/docs/render-migration-as84089443.md)
+- 免費版部署說明：[`docs/render-hobby-free-path.md`](/Users/brian/.openclaw/openclaw-office/docs/render-hobby-free-path.md)
