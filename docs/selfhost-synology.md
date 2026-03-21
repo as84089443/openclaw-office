@@ -5,6 +5,7 @@
 ## 檔案
 
 - Compose: [`docker-compose.selfhost.yml`](/Users/brian/.openclaw/openclaw-office/docker-compose.selfhost.yml)
+- Public tunnel compose: [`docker-compose.selfhost.public.yml`](/Users/brian/.openclaw/openclaw-office/docker-compose.selfhost.public.yml)
 - Docker ignore: [`.dockerignore`](/Users/brian/.openclaw/openclaw-office/.dockerignore)
 
 ## 目標
@@ -20,6 +21,8 @@
 - `runtime/.env.production`
 - `runtime/openclaw.json`
 - `runtime/openclaw-office.config.json`
+- `runtime/cloudflared/config.yml`
+- `runtime/cloudflared/<tunnel-id>.json`
 
 其中：
 
@@ -34,14 +37,30 @@
 docker-compose -f docker-compose.selfhost.yml up -d --build
 ```
 
+若要把公網入口也一起放到同一台主機：
+
+```bash
+docker-compose \
+  -f docker-compose.selfhost.yml \
+  -f docker-compose.selfhost.public.yml \
+  up -d --build
+```
+
 ## 驗證
 
 ```bash
 curl -fsS http://127.0.0.1:4200/api/health
 ```
 
+若 Cloudflare Tunnel 也已啟動，可以再檢查：
+
+```bash
+docker logs --tail 50 openclaw-copilot-tunnel
+```
+
 ## 備註
 
 - 第一輪先把 app 跑起來，不綁死平台。
-- 公網入口可再接 Cloudflare Tunnel、Synology Reverse Proxy 或既有網域代理。
+- 公網入口可接 Cloudflare Tunnel、Synology Reverse Proxy 或既有網域代理。
+- 若使用 Cloudflare Tunnel，建議把 `copilot` 入口做成獨立 tunnel，避免和其他本機服務共用同一條 ingress 設定。
 - 若之後要把 SQLite 升到 Postgres，可以只調整 env 與 compose，不必重改 app。

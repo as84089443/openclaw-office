@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  openclaw-copilot-tunnel:
+    container_name: openclaw-copilot-tunnel
+    image: cloudflare/cloudflared:2026.2.0
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./runtime/cloudflared:/etc/cloudflared:ro
