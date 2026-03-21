@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  openclaw-office:
+    container_name: openclaw-office
+    build: .
+    restart: unless-stopped
+    ports:
+      - "4200:4200"
+    env_file:
+      - ./runtime/.env.production
+    environment:
+      NODE_ENV: production
+      PORT: 4200
+      NEXT_TELEMETRY_DISABLED: 1
+      OPENCLAW_CONFIG_JSON: /app/runtime/openclaw.json
+      OPENCLAW_OFFICE_CONFIG_JSON: /app/runtime/openclaw-office.config.json
+      OPENCLAW_OFFICE_DB_PATH: /app/data/openclaw-office.db
+      FNB_SQLITE_PATH: /app/data/openclaw-office.db
+    volumes:
+      - ./data:/app/data
+      - ./runtime/openclaw.json:/app/runtime/openclaw.json:ro
+      - ./runtime/openclaw-office.config.json:/app/runtime/openclaw-office.config.json:ro
+      - ./public/sprites:/app/public/sprites:ro
+
