@@ -16,6 +16,9 @@
   - `https://github.com/as84089443/openclaw-office`
 - 遷移專用 Blueprint 已建立：
   - [`render.as84089443.yaml`](/Users/brian/.openclaw/openclaw-office/render.as84089443.yaml)
+- 免費版 Blueprint 與替代排程已建立：
+  - [`render.as84089443.hobby.yaml`](/Users/brian/.openclaw/openclaw-office/render.as84089443.hobby.yaml)
+  - [`.github/workflows/merchant-copilot-pulse.yml`](/Users/brian/.openclaw/openclaw-office/.github/workflows/merchant-copilot-pulse.yml)
 - upstream `wickedapp/openclaw-office` PR 已關閉，避免混淆
 
 ## 為什麼不用直接改舊服務
@@ -25,6 +28,13 @@
 - 新建一組 service 最容易驗證，也最好回滾。
 
 ## 建議遷移順序
+
+如果本輪先不升級付費方案，改走免費版路徑：
+
+- 使用 [`render.as84089443.hobby.yaml`](/Users/brian/.openclaw/openclaw-office/render.as84089443.hobby.yaml)
+- 不建立 Render worker
+- 用 [`.github/workflows/merchant-copilot-pulse.yml`](/Users/brian/.openclaw/openclaw-office/.github/workflows/merchant-copilot-pulse.yml) 取代背景輪詢
+- 詳見：[`docs/render-hobby-free-path.md`](/Users/brian/.openclaw/openclaw-office/docs/render-hobby-free-path.md)
 
 ### Phase 1: 建新服務，不綁正式網域
 
