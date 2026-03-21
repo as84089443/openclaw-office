@@ -14,6 +14,7 @@ services:
       PORT: 4200
       NEXT_TELEMETRY_DISABLED: 1
       OPENCLAW_HOME: /app/runtime
+      OPENCLAW_DIR: /app/runtime/openclaw-state
       OPENCLAW_OFFICE_CONFIG_PATH: /app/runtime/openclaw-office.config.json
       OPENCLAW_OFFICE_DB_PATH: /app/data/openclaw-office.db
       FNB_SQLITE_PATH: /app/data/openclaw-office.db
@@ -21,4 +22,6 @@ services:
       - ./data:/app/data
       - ./runtime/openclaw.json:/app/runtime/openclaw.json:ro
       - ./runtime/openclaw-office.config.json:/app/runtime/openclaw-office.config.json:ro
+      - ./runtime/openclaw-state/device.json:/app/runtime/openclaw-state/identity/device.json:ro
+      - ./runtime/openclaw-state/device-auth.json:/app/runtime/openclaw-state/identity/device-auth.json:ro
       - ./public/sprites:/app/public/sprites:ro
