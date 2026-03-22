@@ -18,6 +18,14 @@ npm run demo
 - `http://localhost:4200/ops`：營運面
 - `http://localhost:4200/office`：legacy office
 
+如果你只是想快速把介面叫出來，不想每次手動打網址：
+
+```bash
+npm run office:open
+```
+
+它會優先用 `Google Chrome` 打開本機 `/office`；如果本機沒跑起來，就自動改開公網版。
+
 ## 主要腳本
 
 ```bash
