@@ -7,8 +7,10 @@ import { join } from 'node:path'
 const tempRoot = mkdtempSync(join(tmpdir(), 'openclaw-boss-inbox-'))
 const cronDir = join(tempRoot, 'cron')
 const agentSystemLogsDir = join(tempRoot, 'workspace', 'agent-system', 'logs')
+const maintenanceReportsDir = join(tempRoot, 'artifacts', 'maintenance', 'reports')
 mkdirSync(cronDir, { recursive: true })
 mkdirSync(agentSystemLogsDir, { recursive: true })
+mkdirSync(maintenanceReportsDir, { recursive: true })
 
 const openclawConfig = {
   agents: {
@@ -95,10 +97,46 @@ function writeAuditEnv(values = {}) {
   )
 }
 
+function writeMaintenanceReports({ hygiene = null, cleanup = null } = {}) {
+  const defaultHygiene = {
+    generatedAt: new Date().toISOString(),
+    root: tempRoot,
+    status: 'clean',
+    issues: {
+      unexpectedRootFiles: [],
+      uncoveredTopLevelDirectories: [],
+      missingReadmes: [],
+    },
+    reportPath: join(maintenanceReportsDir, 'latest-root-hygiene.json'),
+  }
+  const defaultCleanup = {
+    generatedAt: new Date().toISOString(),
+    root: tempRoot,
+    summary: {
+      candidateCount: 0,
+      candidateBytes: 0,
+      candidateSizeHuman: '0B',
+      byZone: {},
+    },
+    candidates: [],
+    reportPath: join(maintenanceReportsDir, 'latest-root-maintenance.json'),
+  }
+
+  writeFileSync(
+    join(maintenanceReportsDir, 'latest-root-hygiene.json'),
+    JSON.stringify(hygiene || defaultHygiene, null, 2),
+  )
+  writeFileSync(
+    join(maintenanceReportsDir, 'latest-root-maintenance.json'),
+    JSON.stringify(cleanup || defaultCleanup, null, 2),
+  )
+}
+
 test.beforeEach(() => {
   resetDb()
   writeCronJobs([])
   writeAuditEnv()
+  writeMaintenanceReports()
 })
 
 test('boss inbox roster uses canonical openclaw.json agents instead of legacy office list', () => {
@@ -147,6 +185,98 @@ test('cron failures are surfaced as blocked or risk attention items', () => {
   assert.ok(item)
   assert.equal(item.attentionType, 'risk')
   assert.equal(item.agentId, 'finance-company')
+})
+
+test('root maintenance reports surface a single maintenance attention card when issues exist', () => {
+  writeMaintenanceReports({
+    hygiene: {
+      generatedAt: new Date().toISOString(),
+      root: tempRoot,
+      status: 'issues',
+      issues: {
+        unexpectedRootFiles: ['loose-note.md'],
+        uncoveredTopLevelDirectories: ['mystery-dir'],
+        missingReadmes: ['tmp'],
+      },
+      reportPath: join(maintenanceReportsDir, 'latest-root-hygiene.json'),
+    },
+    cleanup: {
+      generatedAt: new Date().toISOString(),
+      root: tempRoot,
+      summary: {
+        candidateCount: 3,
+        candidateBytes: 4096,
+        candidateSizeHuman: '4.0KB',
+        byZone: {
+          tmp: { count: 3, sizeBytes: 4096, sizeHuman: '4.0KB' },
+        },
+      },
+      candidates: [],
+      reportPath: join(maintenanceReportsDir, 'latest-root-maintenance.json'),
+    },
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace')
+
+  assert.ok(item)
+  assert.equal(item.source, 'maintenance')
+  assert.equal(item.agentId, 'admin')
+  assert.equal(item.attentionType, 'risk')
+  assert.equal(item.hygieneIssueCount, 3)
+  assert.equal(item.cleanupCandidateCount, 3)
+  assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'issues')
+  assert.equal(payload.governanceSummary?.rootHygieneIssueCount, 3)
+  assert.equal(payload.governanceSummary?.rootCleanupCandidateCount, 3)
+  assert.ok(payload.rootMaintenance?.reportPaths?.hygiene)
+})
+
+test('clean root maintenance reports do not create maintenance attention cards', () => {
+  writeMaintenanceReports()
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace')
+
+  assert.equal(item, undefined)
+  assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'clean')
+  assert.equal(payload.governanceSummary?.rootCleanupCandidateCount, 0)
+})
+
+test('stale root maintenance reports are surfaced as a maintenance risk card', () => {
+  const staleAt = new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString()
+  writeMaintenanceReports({
+    hygiene: {
+      generatedAt: staleAt,
+      root: tempRoot,
+      status: 'clean',
+      issues: {
+        unexpectedRootFiles: [],
+        uncoveredTopLevelDirectories: [],
+        missingReadmes: [],
+      },
+      reportPath: join(maintenanceReportsDir, 'latest-root-hygiene.json'),
+    },
+    cleanup: {
+      generatedAt: staleAt,
+      root: tempRoot,
+      summary: {
+        candidateCount: 0,
+        candidateBytes: 0,
+        candidateSizeHuman: '0B',
+        byZone: {},
+      },
+      candidates: [],
+      reportPath: join(maintenanceReportsDir, 'latest-root-maintenance.json'),
+    },
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace')
+
+  assert.ok(item)
+  assert.equal(item.attentionType, 'risk')
+  assert.equal(item.escalationReason, 'maintenance-stale')
+  assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'stale')
 })
 
 test('daily digest is generated as a boss brief and stored with structured sections', () => {
