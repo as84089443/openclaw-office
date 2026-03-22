@@ -25,3 +25,21 @@ services:
       - ./runtime/openclaw-state/device.json:/app/runtime/openclaw-state/identity/device.json:ro
       - ./runtime/openclaw-state/device-auth.json:/app/runtime/openclaw-state/identity/device-auth.json:ro
       - ./public/sprites:/app/public/sprites:ro
+
+  openclaw-maintenance:
+    container_name: openclaw-maintenance
+    image: docker:27-cli
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Taipei
+      APP_DIR: /app
+      BACKUP_DIR: /app/backups
+      BRANCH: master
+      DOCKER_BIN: docker
+      APP_CONTAINER_NAME: openclaw-office
+      DOCKER_COMPOSE_BIN: docker compose
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >-
+      /bin/sh -lc "chmod +x /app/scripts/selfhost-backup.sh /app/scripts/selfhost-update.sh /app/scripts/selfhost-restore.sh /app/scripts/selfhost-notify.sh /app/scripts/selfhost-maintenance-loop.sh /app/scripts/selfhost-one-click.sh /app/scripts/selfhost-autopilot.sh && /app/scripts/selfhost-maintenance-loop.sh"
