@@ -1,9 +1,12 @@
-#!/bin/zsh
+#!/bin/sh
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-$HOME/openclaw-office}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="${APP_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/openclaw-office-backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+APP_CONTAINER_NAME="${APP_CONTAINER_NAME:-openclaw-office}"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 STAGING_DIR="$(mktemp -d)"
 ARCHIVE_PATH="$BACKUP_DIR/openclaw-office-$TIMESTAMP.tgz"
@@ -25,20 +28,20 @@ cp runtime/.env.production "$STAGING_DIR/runtime/" 2>/dev/null || true
 cp runtime/openclaw.json "$STAGING_DIR/runtime/" 2>/dev/null || true
 cp runtime/openclaw-office.config.json "$STAGING_DIR/runtime/" 2>/dev/null || true
 
-if [[ -d runtime/openclaw-state ]]; then
+if [ -d runtime/openclaw-state ]; then
   mkdir -p "$STAGING_DIR/runtime/openclaw-state"
   cp runtime/openclaw-state/device.json "$STAGING_DIR/runtime/openclaw-state/" 2>/dev/null || true
   cp runtime/openclaw-state/device-auth.json "$STAGING_DIR/runtime/openclaw-state/" 2>/dev/null || true
 fi
 
-if [[ -d runtime/cloudflared ]]; then
+if [ -d runtime/cloudflared ]; then
   mkdir -p "$STAGING_DIR/runtime/cloudflared"
   cp runtime/cloudflared/config.yml "$STAGING_DIR/runtime/cloudflared/" 2>/dev/null || true
   cp runtime/cloudflared/*.json "$STAGING_DIR/runtime/cloudflared/" 2>/dev/null || true
 fi
 
-if command -v /usr/local/bin/docker-compose >/dev/null 2>&1 && /usr/local/bin/docker ps --format '{{.Names}}' | rg -x 'openclaw-office' >/dev/null 2>&1; then
-  /usr/local/bin/docker exec openclaw-office sh -lc 'cp /app/data/openclaw-office.db /app/data/openclaw-office.db.snapshot 2>/dev/null || true'
+if command -v "$DOCKER_BIN" >/dev/null 2>&1 && "$DOCKER_BIN" ps --format '{{.Names}}' | grep -x "$APP_CONTAINER_NAME" >/dev/null 2>&1; then
+  "$DOCKER_BIN" exec "$APP_CONTAINER_NAME" sh -lc 'cp /app/data/openclaw-office.db /app/data/openclaw-office.db.snapshot 2>/dev/null || true'
 fi
 
 cp -R data/. "$STAGING_DIR/data/" 2>/dev/null || true

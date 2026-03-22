@@ -7,6 +7,8 @@ data/*.db
 .env.local
 .env
 .env.production
+runtime/
+backups/
 public/data/*
 !public/data/.gitkeep
 openclaw-office.config.json

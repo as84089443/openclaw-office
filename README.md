@@ -95,3 +95,43 @@ npm run test:e2e:report
 - 正式上線前請完成 LINE 與 Google OAuth 外部設定。
 - 遷移執行清單：[`docs/render-migration-as84089443.md`](/Users/brian/.openclaw/openclaw-office/docs/render-migration-as84089443.md)
 - 免費版部署說明：[`docs/render-hobby-free-path.md`](/Users/brian/.openclaw/openclaw-office/docs/render-hobby-free-path.md)
+
+### 本地主機 / NAS 一鍵上線
+
+如果你要直接在本機或 NAS 上跑，不想手動同步 env/config，可直接用：
+
+```bash
+npm run selfhost:deploy:host -- --bootstrap-env runtime/bootstrap.env
+```
+
+`runtime/bootstrap.env` 放置你要補上的 runtime 變數，腳本會自動補齊 `runtime` 缺漏檔並執行 `selfhost-auto-deploy`。
+
+### 主機 + NAS 一條命令
+
+如果你已經有 NAS 可直接掛載到本機路徑，例如 `/volume1/docker/openclaw-office`，可以直接跑：
+
+```bash
+export OPENCLAW_HOST_ROOT=/Users/brian/.openclaw/openclaw-office
+export OPENCLAW_NAS_ROOT=/volume1/docker/openclaw-office
+npm run selfhost:deploy:sync -- --bootstrap-env runtime/bootstrap.env --host-public-url https://copilot.bw-space.com
+```
+
+這個命令會先跑 host（含公開入口），完成後自動繼續跑 NAS（僅 NAS 端 `--skip-public`）。
+
+如果你想要每次都做 git sync（例如自動追 commit）：
+
+```bash
+npm run selfhost:deploy:sync -- --bootstrap-env runtime/bootstrap.env --host-public-url https://copilot.bw-space.com --git-sync
+```
+
+Dry-run 驗證（不實際執行）：
+
+```bash
+npm run selfhost:deploy:sync -- --bootstrap-env runtime/bootstrap.env --dry-run
+```
+
+完全靜默（只回報完成）：
+
+```bash
+npm run selfhost:deploy:sync:quiet -- --bootstrap-env runtime/bootstrap.env --host-public-url https://copilot.bw-space.com
+```

@@ -27,6 +27,7 @@ COPY --from=builder /app/data ./data
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 RUN mkdir -p data && chown nextjs:nodejs data
+RUN chmod -R a+rX /app/lib /app/scripts /app/public /app/data /app/server.js
 USER nextjs
 EXPOSE 4200
 ENV PORT=4200
