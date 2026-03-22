@@ -48,7 +48,7 @@
 
 ## 適合這條免費路的情境
 
-- 先把 `/office`、`/browser`、`/merchant`、`/ops` 上線
+- 先把 `/office`（Boss Inbox）、`/browser`、`/merchant`、`/ops` 上線
 - merchant copilot queue 容忍 `5 分鐘級` 延遲
 - 先驗證產品與入口，不先追求常駐 background worker
 

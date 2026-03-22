@@ -1,4 +1,5 @@
 import { applyCandidatePatch, getCandidatePatchById, reviewCandidatePatch, unapplyCandidatePatch } from '../../../../../lib/evolution.js'
+import { assertOfficeApiRequest, getOfficeRequestErrorStatus } from '../../../../../lib/office-route-auth.js'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -12,7 +13,13 @@ const ACTION_TO_STATUS = {
   pending: 'pending',
 }
 
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
+  try {
+    assertOfficeApiRequest(request)
+  } catch (error) {
+    return Response.json({ error: error.message || 'Unauthorized office request' }, { status: getOfficeRequestErrorStatus(error, 401) })
+  }
+
   const candidate = getCandidatePatchById(params?.id)
   if (!candidate) {
     return Response.json({ error: 'Candidate patch not found' }, { status: 404 })
@@ -34,6 +41,12 @@ export async function GET(_request, { params }) {
 }
 
 export async function POST(request, { params }) {
+  try {
+    assertOfficeApiRequest(request)
+  } catch (error) {
+    return Response.json({ error: error.message || 'Unauthorized office request' }, { status: getOfficeRequestErrorStatus(error, 401) })
+  }
+
   const body = await request.json().catch(() => ({}))
   const action = (body?.action || '').toLowerCase()
   if (action === 'apply' || action === 'unapply' || action === 'rollback') {

@@ -57,16 +57,45 @@ function CopyButton({ value }) {
 }
 
 export default function BrowserRuntimeDashboard({ initialSnapshot }) {
+  const [officeAccess, setOfficeAccess] = useState({ configured: false, authenticated: true, authSource: 'disabled' })
+  const [tokenDraft, setTokenDraft] = useState('')
+  const [accessBusy, setAccessBusy] = useState(false)
   const [snapshot, setSnapshot] = useState(initialSnapshot)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(!initialSnapshot)
+
+  const refreshOfficeAccess = useCallback(async () => {
+    try {
+      const response = await fetch('/api/office/session', { cache: 'no-store' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to read Office access state')
+      }
+      setOfficeAccess({
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        authSource: data.authSource || null,
+      })
+      return data
+    } catch (loadError) {
+      setOfficeAccess({ configured: false, authenticated: true, authSource: 'disabled' })
+      setError(loadError.message || 'Failed to read Office access state')
+      return null
+    }
+  }, [])
 
   const fetchSnapshot = useCallback(async () => {
     try {
       setError('')
       const response = await fetch('/api/browser-stack', { cache: 'no-store' })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
+        if (response.status === 401) {
+          await refreshOfficeAccess()
+          setSnapshot(null)
+          setError('Office token required before reading Browser Runtime.')
+          return
+        }
         throw new Error(data?.error || 'Browser stack API unavailable')
       }
       setSnapshot(data)
@@ -76,15 +105,82 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       setError(loadError.message || 'Browser stack API unavailable')
       setLoading(false)
     }
-  }, [])
+  }, [refreshOfficeAccess])
 
   useEffect(() => {
-    if (!initialSnapshot) {
-      fetchSnapshot()
+    let interval = null
+    let cancelled = false
+
+    async function bootstrap() {
+      const access = await refreshOfficeAccess()
+      if (cancelled) return
+      if (!access?.configured || access?.authenticated) {
+        await fetchSnapshot()
+        if (cancelled) return
+        interval = window.setInterval(fetchSnapshot, 15000)
+      } else {
+        setSnapshot(null)
+        setLoading(false)
+      }
     }
-    const interval = window.setInterval(fetchSnapshot, 15000)
-    return () => window.clearInterval(interval)
-  }, [fetchSnapshot, initialSnapshot])
+
+    bootstrap()
+    return () => {
+      cancelled = true
+      if (interval) window.clearInterval(interval)
+    }
+  }, [fetchSnapshot, refreshOfficeAccess])
+
+  const submitOfficeAccess = useCallback(async (event) => {
+    event.preventDefault()
+    setAccessBusy(true)
+    setError('')
+    try {
+      const response = await fetch('/api/office/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: tokenDraft.trim() }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to authorize Office access')
+      }
+      setOfficeAccess({
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        authSource: data.authSource || 'cookie',
+      })
+      setTokenDraft('')
+      setLoading(true)
+      await fetchSnapshot()
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to authorize Office access')
+    } finally {
+      setAccessBusy(false)
+    }
+  }, [fetchSnapshot, tokenDraft])
+
+  const clearOfficeAccess = useCallback(async () => {
+    setAccessBusy(true)
+    setError('')
+    try {
+      const response = await fetch('/api/office/session', { method: 'DELETE' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to clear Office access')
+      }
+      setOfficeAccess({
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        authSource: data.authSource || null,
+      })
+      setSnapshot(null)
+    } catch (clearError) {
+      setError(clearError.message || 'Failed to clear Office access')
+    } finally {
+      setAccessBusy(false)
+    }
+  }, [])
 
   const metrics = useMemo(() => ([
     {
@@ -152,87 +248,143 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {metrics.map((metric) => (
-            <MetricCard key={metric.label} {...metric} />
-          ))}
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="glass-card rounded-[28px] p-6">
-            <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-cyan-300">
-              <Terminal className="h-4 w-4" />
-              Command Presets
-            </div>
-            <div className="mt-5 grid gap-4">
-              {snapshot?.commandPresets?.map((preset) => (
-                <div
-                  key={preset.id}
-                  className="rounded-[24px] border p-4"
-                  style={{ borderColor: `${preset.tone}44`, background: `${preset.tone}10` }}
+        {officeAccess.configured && (
+          <section className="glass-card rounded-[28px] p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Browser Access</div>
+                <div className="mt-2 text-sm leading-7 text-gray-300">
+                  {officeAccess.authenticated
+                    ? '這個瀏覽器已取得 Browser Runtime 存取權限。'
+                    : 'Browser Runtime 現在也走 x-office 保護，先驗證一次再看 Chrome / MCP 真實狀態。'}
+                </div>
+                <div className="mt-2 text-[11px] text-gray-500">
+                  header: <code>x-office-token</code>
+                  {officeAccess.authSource ? ` / current: ${officeAccess.authSource}` : ''}
+                </div>
+              </div>
+              {officeAccess.authenticated ? (
+                <button
+                  type="button"
+                  disabled={accessBusy}
+                  onClick={clearOfficeAccess}
+                  className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="text-xs uppercase tracking-[0.22em]" style={{ color: preset.tone }}>
-                        {preset.label}
+                  {accessBusy ? 'Signing Out...' : 'Clear Access'}
+                </button>
+              ) : (
+                <form className="flex w-full max-w-xl flex-col gap-3 lg:w-auto lg:flex-row" onSubmit={submitOfficeAccess}>
+                  <input
+                    type="password"
+                    value={tokenDraft}
+                    onChange={(event) => setTokenDraft(event.target.value)}
+                    placeholder="Paste OFFICE_ADMIN_TOKEN"
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40 lg:min-w-[320px]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={accessBusy || !tokenDraft.trim()}
+                    className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {accessBusy ? 'Authorizing...' : 'Authorize'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </section>
+        )}
+
+        {officeAccess.configured && !officeAccess.authenticated && !snapshot ? (
+          <section className="glass-card rounded-[28px] p-6 text-sm leading-7 text-gray-300">
+            先完成 Office access 驗證，這裡才會顯示真實 Chrome、CDP targets 與 browser CLI 狀態。
+          </section>
+        ) : null}
+
+        {(!officeAccess.configured || officeAccess.authenticated || snapshot) && (
+          <>
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {metrics.map((metric) => (
+                <MetricCard key={metric.label} {...metric} />
+              ))}
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="glass-card rounded-[28px] p-6">
+                <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-cyan-300">
+                  <Terminal className="h-4 w-4" />
+                  Command Presets
+                </div>
+                <div className="mt-5 grid gap-4">
+                  {snapshot?.commandPresets?.map((preset) => (
+                    <div
+                      key={preset.id}
+                      className="rounded-[24px] border p-4"
+                      style={{ borderColor: `${preset.tone}44`, background: `${preset.tone}10` }}
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-[0.22em]" style={{ color: preset.tone }}>
+                            {preset.label}
+                          </div>
+                          <div className="text-sm leading-7 text-gray-300">{preset.description}</div>
+                          <code className="block overflow-x-auto rounded-2xl border border-black/20 bg-black/30 px-3 py-3 text-xs text-cyan-100">
+                            {preset.command}
+                          </code>
+                        </div>
+                        <CopyButton value={preset.command} />
                       </div>
-                      <div className="text-sm leading-7 text-gray-300">{preset.description}</div>
-                      <code className="block overflow-x-auto rounded-2xl border border-black/20 bg-black/30 px-3 py-3 text-xs text-cyan-100">
-                        {preset.command}
-                      </code>
                     </div>
-                    <CopyButton value={preset.command} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="glass-card rounded-[28px] p-6">
+                  <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-green-300">
+                    <PlugZap className="h-4 w-4" />
+                    Runtime Scripts
+                  </div>
+                  <div className="mt-5 space-y-3">
+                    {snapshot?.scripts?.map((script) => (
+                      <div key={script.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-white">{script.id}</div>
+                          <div className={`text-xs ${script.exists ? 'text-green-300' : 'text-red-300'}`}>
+                            {script.exists ? 'present' : 'missing'}
+                          </div>
+                        </div>
+                        <div className="mt-2 break-all text-xs text-gray-500">{script.path}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            <div className="glass-card rounded-[28px] p-6">
-              <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-green-300">
-                <PlugZap className="h-4 w-4" />
-                Runtime Scripts
-              </div>
-              <div className="mt-5 space-y-3">
-                {snapshot?.scripts?.map((script) => (
-                  <div key={script.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-white">{script.id}</div>
-                      <div className={`text-xs ${script.exists ? 'text-green-300' : 'text-red-300'}`}>
-                        {script.exists ? 'present' : 'missing'}
+                <div className="glass-card rounded-[28px] p-6">
+                  <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-purple-300">
+                    <ExternalLink className="h-4 w-4" />
+                    Connected Targets
+                  </div>
+                  <div className="mt-5 space-y-3">
+                    {(snapshot?.cdpTargets || []).map((target) => (
+                      <div key={target.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-white">{target.title || 'Untitled target'}</div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-gray-400">{target.type}</div>
+                        </div>
+                        <div className="mt-2 break-all text-xs text-gray-500">{target.url}</div>
                       </div>
-                    </div>
-                    <div className="mt-2 break-all text-xs text-gray-500">{script.path}</div>
+                    ))}
+                    {!snapshot?.cdpTargets?.length ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-gray-500">
+                        目前沒有偵測到 CDP targets。先跑 `browser doctor` 或重新打開 bridge Chrome。
+                      </div>
+                    ) : null}
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-
-            <div className="glass-card rounded-[28px] p-6">
-              <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-purple-300">
-                <ExternalLink className="h-4 w-4" />
-                Connected Targets
-              </div>
-              <div className="mt-5 space-y-3">
-                {(snapshot?.cdpTargets || []).map((target) => (
-                  <div key={target.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-white">{target.title || 'Untitled target'}</div>
-                      <div className="text-xs uppercase tracking-[0.18em] text-gray-400">{target.type}</div>
-                    </div>
-                    <div className="mt-2 break-all text-xs text-gray-500">{target.url}</div>
-                  </div>
-                ))}
-                {!snapshot?.cdpTargets?.length ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-gray-500">
-                    目前沒有偵測到 CDP targets。先跑 `browser doctor` 或重新打開 bridge Chrome。
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </div>
     </main>
   )
