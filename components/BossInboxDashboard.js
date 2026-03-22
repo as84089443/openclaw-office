@@ -25,23 +25,63 @@ function toPriorityOrder(value) {
   return Number.isFinite(number) && number > 0 ? number : Number.MAX_SAFE_INTEGER
 }
 
-function deriveRecommendedAction(item, hint = null) {
-  const suggested = String(hint?.suggestedAction || '').toLowerCase()
-  if (suggested === 'create_task') {
-    return item.linkedTaskId ? 'acknowledge' : 'create_task'
+function getAvailableHintActionsForItem(item) {
+  const status = item?.status || 'open'
+  if (status !== 'open') return ['reopen']
+  const actions = ['acknowledge', 'resolve', 'snooze']
+  if (item?.unresolved && !item?.linkedTaskId) {
+    actions.push('create_task')
   }
-  if (suggested === 'resolve') return item.status === 'open' ? 'resolve' : 'reopen'
-  if (suggested === 'reopen') return item.status === 'open' ? 'acknowledge' : 'reopen'
-  if (suggested === 'acknowledge') return 'acknowledge'
-  if (suggested === 'snooze') return 'snooze'
+  return actions
+}
+
+function isHintActionAvailable(item, action) {
+  const candidate = String(action || '').toLowerCase()
+  return getAvailableHintActionsForItem(item).includes(candidate)
+}
+
+function deriveRecommendedAction(item, hint = null) {
+  const hintedActionList = Array.isArray(hint?.actionScores)
+    ? hint.actionScores
+      .map((entry) => String(entry?.action || '').toLowerCase())
+      .filter(Boolean)
+    : []
+
+  for (const action of hintedActionList) {
+    if (isHintActionAvailable(item, action)) return action
+  }
+
+  const suggested = String(hint?.suggestedAction || '').toLowerCase()
+  if (isHintActionAvailable(item, suggested)) return suggested
+  if (suggested === 'reopen' && isHintActionAvailable(item, 'reopen')) return 'reopen'
   if (item.status !== 'open') return 'reopen'
-  if (!item.linkedTaskId && item.unresolved) return 'create_task'
-  return 'acknowledge'
+  if (item.unresolved && !item.linkedTaskId) return 'create_task'
+  if (isHintActionAvailable(item, 'resolve')) return 'resolve'
+  if (isHintActionAvailable(item, 'acknowledge')) return 'acknowledge'
+  return item.status === 'open' ? 'snooze' : 'reopen'
 }
 
 function formatTime(ts) {
   if (!ts) return '—'
   return new Date(ts).toLocaleString()
+}
+
+function formatHintActionScores(actionScores = []) {
+  if (!Array.isArray(actionScores) || actionScores.length === 0) return []
+  return actionScores
+    .map((entry) => {
+      const action = String(entry?.action || '').trim()
+      if (!action) return null
+      const score = Number(entry?.score)
+      const success = Number(entry?.expectedSuccess)
+      return {
+        action,
+        actionLabel: ACTION_LABEL[action] || action,
+        score: Number.isFinite(score) ? score : 0,
+        success: Number.isFinite(success) ? success : 0,
+      }
+    })
+    .filter(Boolean)
 }
 
 function CountCard({ label, value, color, Icon }) {
@@ -80,9 +120,9 @@ function AttentionRow({
   const Icon = meta.icon
   const recommendedAction = deriveRecommendedAction(item, actionHint)
   const recommendedLabel = ACTION_LABEL[recommendedAction] || 'Action'
-  const canRecommendCreateTask = !(actionId !== null || Boolean(item.linkedTaskId))
-  const canRecommendMutate = actionId === null
-  const recommendedDisabled = recommendedAction === 'create_task' ? !canRecommendCreateTask : !canRecommendMutate
+  const suggestedActionHint = formatHintActionScores(actionHint?.actionScores || []).find((entry) => entry.action === recommendedAction)
+  const recommendedSuccess = Number.isFinite(suggestedActionHint?.success) ? suggestedActionHint.success : Number(actionHint?.expectedSuccess || 0)
+  const recommendedDisabled = actionId !== null || !isHintActionAvailable(item, recommendedAction)
   const linkedTaskLabel = item.linkedTaskId
     ? `${item.linkedTaskId}${item.linkedTaskStatus ? ` / ${item.linkedTaskStatus}` : ''}`
     : null
@@ -126,11 +166,24 @@ function AttentionRow({
           {actionHint && (
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-cyan-100/80">
               <span>hint: {recommendedLabel}</span>
-              {actionHint?.expectedSuccess !== undefined && (
-                <span>success: {Math.round(Number(actionHint.expectedSuccess || 0) * 100)}%</span>
+              {Number.isFinite(recommendedSuccess) && (
+                <span>success: {Math.round(recommendedSuccess * 100)}%</span>
               )}
               {actionHint?.recommendedOwner && <span>owner: {actionHint.recommendedOwner}</span>}
               {actionHint?.shouldBlock && <span className="text-rose-200">blocking</span>}
+            </div>
+          )}
+          {actionHint?.actionScores?.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-cyan-200/70">
+              {formatHintActionScores(actionHint.actionScores).slice(0, 3).map((entry, index) => (
+                <span
+                  key={`${item.id}-${entry.action}`}
+                  className="rounded-full border border-cyan-400/25 px-2 py-0.5"
+                  style={{ opacity: index === 0 ? 1 : 0.75 }}
+                >
+                  {index + 1}. {entry.actionLabel} {Math.round(entry.success * 100)}% / {Math.round(entry.score * 100)}
+                </span>
+              ))}
             </div>
           )}
           {item.categories?.length > 0 && (
@@ -177,7 +230,7 @@ function AttentionRow({
         </button>
         <button
           type="button"
-          disabled={actionId !== null}
+          disabled={actionId !== null || !isHintActionAvailable(item, 'acknowledge')}
           onClick={() => onAttentionAction(item.id, 'acknowledge')}
           className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -185,7 +238,7 @@ function AttentionRow({
         </button>
         <button
           type="button"
-          disabled={actionId !== null || Boolean(item.linkedTaskId)}
+          disabled={actionId !== null || !isHintActionAvailable(item, 'create_task')}
           onClick={() => onOpenTaskDraft(item, actionHint)}
           className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -193,7 +246,7 @@ function AttentionRow({
         </button>
         <button
           type="button"
-          disabled={actionId !== null}
+          disabled={actionId !== null || !isHintActionAvailable(item, 'resolve')}
           onClick={() => onAttentionAction(item.id, 'resolve')}
           className="rounded-lg border border-emerald-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -201,7 +254,7 @@ function AttentionRow({
         </button>
         <button
           type="button"
-          disabled={actionId !== null}
+          disabled={actionId !== null || !isHintActionAvailable(item, 'snooze')}
           onClick={() => onAttentionAction(item.id, 'snooze', { snoozeHours: 24 })}
           className="rounded-lg border border-amber-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-amber-200 transition hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -210,7 +263,7 @@ function AttentionRow({
         {item.status !== 'open' && (
           <button
             type="button"
-            disabled={actionId !== null}
+            disabled={actionId !== null || !isHintActionAvailable(item, 'reopen')}
             onClick={() => onAttentionAction(item.id, 'reopen')}
             className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
           >

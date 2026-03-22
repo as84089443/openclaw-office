@@ -9,15 +9,20 @@ const SCRIPT_PATH = '/Users/brian/.openclaw/workspace/agent-system/scripts/gener
 
 function setupBizdevFixture(rootDir) {
   mkdirSync(join(rootDir, 'workspace', 'agent-system', 'logs'), { recursive: true })
+  mkdirSync(join(rootDir, 'workspace', 'agent-system', 'data'), { recursive: true })
   mkdirSync(join(rootDir, 'workspace-bizdev'), { recursive: true })
 
   writeFileSync(
     join(rootDir, 'workspace', 'agent-system', 'logs', 'followup-db.csv'),
-    'company,email\nExample,hello@example.com\n',
+    'company,email,date,status,agent,notes\nACME,hello@acme.test,2026-03-22,followup,Brian,from-crm\n',
+  )
+  writeFileSync(
+    join(rootDir, 'workspace', 'agent-system', 'data', 'orders.csv'),
+    'client,deal_type\nACME,followup\n',
   )
   writeFileSync(
     join(rootDir, 'workspace-bizdev', 'POTENTIAL_CUSTOMERS.md'),
-    '| 公司 | 狀態 |\n| Example | followup |\n',
+    '| 公司 | 狀態 |\n| ACME | followup |\n',
   )
 }
 
@@ -47,7 +52,8 @@ test('fish input snapshot script writes under OPENCLAW_HOME agent-system logs', 
     const snapshot = JSON.parse(readFileSync(result.snapshotPath, 'utf8'))
     assert.equal(snapshot.agentId, 'bizdev')
     assert.equal(snapshot.checks.followupRows, 1)
-    assert.equal(snapshot.sources.followupDbPath, join(tempRoot, 'workspace', 'agent-system', 'logs', 'followup-db.csv'))
+    assert.equal(snapshot.checks.rawFollowupRows, 1)
+    assert.equal(snapshot.sources.rawFollowupDbPath, join(tempRoot, 'workspace', 'agent-system', 'logs', 'followup-db.csv'))
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

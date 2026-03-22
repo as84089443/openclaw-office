@@ -331,3 +331,109 @@ test('attentionActionHints learns from historical action outcomes and exposes ex
   assert.ok(Object.prototype.hasOwnProperty.call(payload || {}, 'autonomyUpgradeAdvice'))
   assert.ok(['hold', 'upgrade', 'downgrade'].includes(payload.autonomyUpgradeAdvice?.direction))
 })
+
+test('attentionActionHints maps to valid front-end actions and respects state', () => {
+  const now = Date.now()
+  const openNoTaskId = 'req_hint_open_notask'
+  createRequest({
+    id: openNoTaskId,
+    content: 'blocked: 找不到權限，請先處理同步中斷',
+    from: 'Boss',
+    state: 'assigned',
+    assignedTo: 'bizdev',
+    attentionType: 'blocked',
+    needsDecision: false,
+    priority: 90,
+  })
+
+  const openWithTaskId = 'req_hint_open_with_task'
+  createRequest({
+    id: openWithTaskId,
+    content: 'risk: 付款流程等待核對中',
+    from: 'Boss',
+    state: 'assigned',
+    assignedTo: 'finance-company',
+    attentionType: 'risk',
+    needsDecision: false,
+    priority: 85,
+  })
+  createTask({
+    id: 'task_hint_with_task',
+    requestId: openWithTaskId,
+    title: '付款核對',
+    detail: '確認付款資料',
+    assignedAgent: 'admin',
+    status: 'completed',
+    attentionType: 'risk',
+    priority: 85,
+    createdAt: now - (2 * 24 * 60 * 60 * 1000),
+    completedAt: now - (18 * 60 * 60 * 1000),
+  })
+
+  const resolvedByActionId = 'req_hint_resolved'
+  createRequest({
+    id: resolvedByActionId,
+    content: 'decision: 該用哪個文案方向',
+    from: 'Boss',
+    state: 'assigned',
+    assignedTo: 'seo',
+    attentionType: 'decision',
+    needsDecision: true,
+    priority: 70,
+  })
+  upsertAttentionState({
+    id: resolvedByActionId,
+    source: 'evolution',
+    agentId: 'seo',
+    attentionType: 'decision',
+    status: 'resolved',
+    signalCount: 1,
+    signalScoreMax: 78,
+    categories: ['copy'],
+    updatedAt: now - 1000,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const openNoTaskHint = payload.attentionActionHints?.[openNoTaskId]
+  const openWithTaskHint = payload.attentionActionHints?.[openWithTaskId]
+  const resolvedHint = payload.attentionActionHints?.[resolvedByActionId]
+
+  assert.ok(openNoTaskHint)
+  assert.equal(openNoTaskHint.suggestedAction, 'create_task')
+  assert.ok(Number.isFinite(openNoTaskHint.expectedSuccess))
+  assert.equal(openNoTaskHint.shouldBlock, true)
+  assert.ok(openWithTaskHint)
+  assert.ok(['acknowledge', 'resolve'].includes(openWithTaskHint.suggestedAction))
+  assert.equal(openWithTaskHint.shouldBlock, true)
+  assert.ok(resolvedHint)
+  assert.equal(resolvedHint.suggestedAction, 'reopen')
+  assert.equal(resolvedHint.shouldBlock, false)
+})
+
+test('attentionActionHints includes action score ladder for deterministic default action', () => {
+  const now = Date.now()
+  const targetId = 'req_hint_scores'
+  createRequest({
+    id: targetId,
+    content: 'decision: 明天要不要開啟A/B測試',
+    from: 'Boss',
+    state: 'assigned',
+    assignedTo: 'admin',
+    attentionType: 'decision',
+    needsDecision: true,
+    priority: 72,
+    createdAt: now,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const hint = payload.attentionActionHints?.[targetId]
+
+  assert.ok(Array.isArray(hint?.actionScores), 'expected actionScores array')
+  assert.ok(hint.actionScores.length >= 2)
+  assert.equal(hint.actionScores[0]?.action, 'create_task')
+  assert.ok(
+    hint.actionScores.every((entry, index, list) => index === 0 || Number(entry?.score || 0) <= Number(list[index - 1]?.score || 0)),
+    'action scores should be ordered descending'
+  )
+  assert.ok(Number.isFinite(hint.expectedSuccess))
+})
