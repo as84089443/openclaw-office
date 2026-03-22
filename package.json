@@ -50,6 +50,7 @@
     "test:discord-reports": "node --test tests/discord-report-prompts.test.mjs tests/fish-input-snapshot.test.mjs && node ../scripts/validate-discord-report-prompts.mjs",
     "test:fnb": "node --test tests/fnb-service.test.mjs",
     "test:boss-inbox": "node --test tests/boss-inbox.test.mjs",
+    "test:office-auth": "node --test tests/office-auth.test.mjs",
     "test:evolution": "node --test tests/evolution-loop.test.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",

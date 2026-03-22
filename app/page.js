@@ -20,9 +20,9 @@ const entryPoints = [
   },
   {
     href: '/office',
-    title: 'Legacy Office',
-    subtitle: '舊版辦公室面板',
-    description: '保留原本 generic OpenClaw office dashboard，給內部繼續使用。',
+    title: 'BW Office',
+    subtitle: 'Boss Inbox',
+    description: '給老闆與內部治理的決策入口。只留 attention、digest 與進化治理，不再混 legacy realtime 面板。',
     accent: '#ffb703',
     icon: Building2,
   },
@@ -46,12 +46,12 @@ export default function HomePage() {
               OpenClaw BW Copilot
             </div>
             <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
-              把店家面、營運面、舊版 office
+              把店家面、營運面、Boss Inbox
               <span className="block text-cyan-300">正式拆開。</span>
             </h1>
             <p className="mt-5 max-w-3xl text-sm leading-8 text-gray-300 md:text-base">
-              這個版本的目標很直接：店家不需要學會使用後台，營運團隊有自己的 console，舊版 generic office
-              不再跟 merchant-facing product 混在同一個入口。
+              這個版本的目標很直接：店家不需要學會使用後台，營運團隊有自己的 console，老闆只看 Boss Inbox，
+              不再把 legacy realtime debug 面板混在同一個入口。
             </p>
           </div>
         </section>
@@ -89,7 +89,7 @@ export default function HomePage() {
               <p>1. 先看 `/merchant`，確認店家真正看到的操作負擔夠低。</p>
               <p>2. 再看 `/ops`，確認 autopilot、例外與成效能被內部接住。</p>
               <p>3. `/browser` 用來檢查 Chrome bridge 與複製正確 browser 指令。</p>
-              <p>4. `/office` 只留給原本 OpenClaw 流程，不再當產品主入口。</p>
+              <p>4. `/office` 只留給 Boss Inbox 與治理操作，不再承擔 legacy realtime runtime 面板。</p>
             </div>
           </div>
 

@@ -8,7 +8,7 @@ function NavBar() {
       <div className="mx-auto flex h-12 max-w-7xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <a href="/" className="text-lg font-bold text-cyan-400 transition-colors hover:text-white">
-            OpenClaw
+            BW Copilot
           </a>
           <a href="/merchant" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
             Merchant
@@ -24,7 +24,7 @@ function NavBar() {
           </a>
         </div>
         <div className="text-xs text-gray-500">
-          BW Copilot
+          Boss Inbox / Ops / Browser
         </div>
       </div>
     </nav>

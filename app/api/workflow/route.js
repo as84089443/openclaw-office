@@ -33,6 +33,7 @@ import {
 } from '../../../lib/db'
 import { eventBus, EVENTS } from '../../../lib/event-bus'
 import { recordAttentionTaskFeedback } from '../../../lib/boss-inbox.js'
+import { assertOfficeApiRequest, getOfficeRequestErrorStatus } from '../../../lib/office-route-auth.js'
 
 function timeStr() {
   return new Date().toLocaleTimeString('en-US', { 
@@ -403,6 +404,12 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  try {
+    assertOfficeApiRequest(request)
+  } catch (error) {
+    return Response.json({ error: error.message || 'Unauthorized office request' }, { status: getOfficeRequestErrorStatus(error, 401) })
+  }
+
   try {
     const body = await request.json()
     const { action } = body

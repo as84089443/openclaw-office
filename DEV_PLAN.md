@@ -13,7 +13,7 @@
 - [ ] 檔案操作規則：檔案不存在用 write；已存在才用 edit；先檢查存在性再選工具
 
 ## Done
-- [x] Office 任務面板 v1：CurrentTasksPanel + task detail view
+- [x] Office 任務面板 v1：CurrentTasksPanel + task detail view（2026-03 已隨 legacy realtime dashboard 退役）
 - [x] Office 任務欄位：milestone / nextStep / lastUpdate
 - [x] Telegram milestone 推播：開始 / 完成 / 卡住
 - [x] 任務面板 stale 標記

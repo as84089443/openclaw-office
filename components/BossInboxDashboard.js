@@ -98,6 +98,76 @@ function CountCard({ label, value, color, Icon }) {
   )
 }
 
+function OfficeAccessPanel({
+  access,
+  tokenDraft,
+  busy,
+  error,
+  onTokenChange,
+  onSubmit,
+  onLogout,
+}) {
+  if (!access?.configured) return null
+
+  return (
+    <div className="glass-card rounded-2xl p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Office Access</div>
+          <div className="mt-2 text-sm text-white">
+            {access.authenticated
+              ? '這個瀏覽器已經取得 Office 寫入權限。Boss Inbox 的操作會直接走 session cookie。'
+              : 'Office 寫入 API 已啟用保護。貼上 Office token 後，這個瀏覽器就能直接操作 Boss Inbox。'}
+          </div>
+          <div className="mt-2 text-[11px] text-gray-400">
+            header: <code>x-office-token</code>
+            {access.authSource ? ` / current: ${access.authSource}` : ''}
+          </div>
+        </div>
+
+        {access.authenticated ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-emerald-200">
+              Authorized
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onLogout}
+              className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? 'Signing Out...' : 'Clear Access'}
+            </button>
+          </div>
+        ) : (
+          <form className="flex w-full max-w-xl flex-col gap-3 lg:w-auto lg:flex-row" onSubmit={onSubmit}>
+            <input
+              type="password"
+              value={tokenDraft}
+              onChange={(event) => onTokenChange(event.target.value)}
+              placeholder="Paste OFFICE_ADMIN_TOKEN"
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40 lg:min-w-[320px]"
+            />
+            <button
+              type="submit"
+              disabled={busy || !tokenDraft.trim()}
+              className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? 'Authorizing...' : 'Authorize'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-sm text-rose-200">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AttentionRow({
   item,
   actionHint,
@@ -573,6 +643,10 @@ export default function BossInboxDashboard() {
   const [payload, setPayload] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [officeAccess, setOfficeAccess] = useState({ configured: false, authenticated: true, authSource: 'disabled' })
+  const [officeTokenDraft, setOfficeTokenDraft] = useState('')
+  const [officeAccessBusy, setOfficeAccessBusy] = useState(false)
+  const [officeAccessError, setOfficeAccessError] = useState('')
   const [showAllFish, setShowAllFish] = useState(false)
   const [showInactiveFish, setShowInactiveFish] = useState(false)
   const [candidateActionId, setCandidateActionId] = useState(null)
@@ -586,21 +660,125 @@ export default function BossInboxDashboard() {
     if (withSpinner) setRefreshing(true)
     try {
       const res = await fetch('/api/boss-inbox', { cache: 'no-store' })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        if (res.status === 401) {
+          await refreshOfficeAccess()
+          setPayload(null)
+          setOfficeAccessError('Office token required before reading Boss Inbox.')
+          return
+        }
+        throw new Error(data?.error || 'Failed to fetch boss inbox')
+      }
       setPayload(data)
     } catch (error) {
       console.error('Failed to fetch boss inbox:', error)
+      setOfficeAccessError((current) => current || error.message || 'Failed to fetch boss inbox')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }
 
+  const refreshOfficeAccess = async () => {
+    try {
+      const res = await fetch('/api/office/session', { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to read Office access state')
+      }
+      setOfficeAccess({
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        authSource: data.authSource || null,
+      })
+      setOfficeAccessError('')
+      return data
+    } catch (error) {
+      setOfficeAccess((current) => ({ ...current, configured: false, authenticated: true, authSource: 'disabled' }))
+      setOfficeAccessError(error.message || 'Failed to read Office access state')
+      return null
+    }
+  }
+
   useEffect(() => {
-    load()
-    const timer = setInterval(() => load(), 30_000)
-    return () => clearInterval(timer)
+    let timer = null
+    let cancelled = false
+
+    async function bootstrap() {
+      const access = await refreshOfficeAccess()
+      if (cancelled) return
+      if (!access?.configured || access?.authenticated) {
+        await load()
+        if (cancelled) return
+        timer = setInterval(() => load(), 30_000)
+      } else {
+        setPayload(null)
+        setLoading(false)
+      }
+    }
+
+    bootstrap()
+
+    return () => {
+      cancelled = true
+      if (timer) clearInterval(timer)
+    }
   }, [])
+
+  const submitOfficeAccess = async (event) => {
+    event.preventDefault()
+    setOfficeAccessBusy(true)
+    setOfficeAccessError('')
+    try {
+      const res = await fetch('/api/office/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: officeTokenDraft.trim() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to authorize Office access')
+      }
+      setOfficeAccess({
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        authSource: data.authSource || 'cookie',
+      })
+      setOfficeTokenDraft('')
+      setPayload(null)
+      setLoading(true)
+      await load(true)
+    } catch (error) {
+      setOfficeAccessError(error.message || 'Failed to authorize Office access')
+    } finally {
+      setOfficeAccessBusy(false)
+    }
+  }
+
+  const clearOfficeAccess = async () => {
+    setOfficeAccessBusy(true)
+    setOfficeAccessError('')
+    try {
+      const res = await fetch('/api/office/session', { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to clear Office access')
+      }
+      setOfficeAccess({
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        authSource: data.authSource || null,
+      })
+      if (data.configured) {
+        setPayload(null)
+      }
+    } catch (error) {
+      setOfficeAccessError(error.message || 'Failed to clear Office access')
+    } finally {
+      setOfficeAccessBusy(false)
+    }
+  }
 
   const attentionItems = payload?.attentionItems || []
   const attentionActionHints = payload?.attentionActionHints || {}
@@ -709,6 +887,10 @@ export default function BossInboxDashboard() {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        if (res.status === 401) {
+          await refreshOfficeAccess()
+          setOfficeAccessError('Office token required before reviewing candidate patches.')
+        }
         throw new Error(data?.error || 'Failed to review candidate patch')
       }
       await load(true)
@@ -734,6 +916,10 @@ export default function BossInboxDashboard() {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        if (res.status === 401) {
+          await refreshOfficeAccess()
+          setOfficeAccessError('Office token required before updating attention cards.')
+        }
         throw new Error(data?.error || 'Failed to update attention item')
       }
       await load(true)
@@ -777,12 +963,30 @@ export default function BossInboxDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <CountCard label="待決策" value={payload?.unresolvedCounts?.decision || 0} color={TYPE_META.decision.color} Icon={TYPE_META.decision.icon} />
-        <CountCard label="阻塞" value={payload?.unresolvedCounts?.blocked || 0} color={TYPE_META.blocked.color} Icon={TYPE_META.blocked.icon} />
-        <CountCard label="風險" value={payload?.unresolvedCounts?.risk || 0} color={TYPE_META.risk.color} Icon={TYPE_META.risk.icon} />
-        <CountCard label="商機" value={payload?.unresolvedCounts?.opportunity || 0} color={TYPE_META.opportunity.color} Icon={TYPE_META.opportunity.icon} />
-      </div>
+      {(!officeAccess.configured || officeAccess.authenticated || payload) && (
+        <div className="grid gap-4 md:grid-cols-4">
+          <CountCard label="待決策" value={payload?.unresolvedCounts?.decision || 0} color={TYPE_META.decision.color} Icon={TYPE_META.decision.icon} />
+          <CountCard label="阻塞" value={payload?.unresolvedCounts?.blocked || 0} color={TYPE_META.blocked.color} Icon={TYPE_META.blocked.icon} />
+          <CountCard label="風險" value={payload?.unresolvedCounts?.risk || 0} color={TYPE_META.risk.color} Icon={TYPE_META.risk.icon} />
+          <CountCard label="商機" value={payload?.unresolvedCounts?.opportunity || 0} color={TYPE_META.opportunity.color} Icon={TYPE_META.opportunity.icon} />
+        </div>
+      )}
+
+      <OfficeAccessPanel
+        access={officeAccess}
+        tokenDraft={officeTokenDraft}
+        busy={officeAccessBusy}
+        error={officeAccessError}
+        onTokenChange={setOfficeTokenDraft}
+        onSubmit={submitOfficeAccess}
+        onLogout={clearOfficeAccess}
+      />
+
+      {officeAccess.configured && !officeAccess.authenticated && !payload && (
+        <div className="glass-card rounded-2xl p-6 text-sm leading-7 text-gray-300">
+          先完成 Office access 驗證，Boss Inbox 的 attention、digest 與 candidate patches 才會載入。
+        </div>
+      )}
 
       {governanceSummary && (
         <div className="glass-card rounded-2xl p-4">

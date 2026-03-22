@@ -16,7 +16,7 @@ npm run demo
 - `http://localhost:4200/`：產品入口
 - `http://localhost:4200/merchant`：商家面
 - `http://localhost:4200/ops`：營運面
-- `http://localhost:4200/office`：legacy office
+- `http://localhost:4200/office`：BW Office / Boss Inbox
 
 如果你只是想快速把介面叫出來，不想每次手動打網址：
 
@@ -25,6 +25,12 @@ npm run office:open
 ```
 
 它會優先用 `Google Chrome` 打開本機 `/office`；如果本機沒跑起來，就自動改開公網版。
+
+## `/office` 現況
+
+- `/office` 現在只保留 Boss Inbox 與治理操作。
+- 舊的 Legacy Office realtime 面板已移出主入口，原因是部署站 gateway 未連到真實 OpenClaw runtime，保留在主畫面只會長期降級。
+- 寫入與治理操作可用 `OFFICE_ADMIN_TOKEN` 搭配 `x-office-token`，或先透過 `/api/office/session` 建立瀏覽器 session。
 
 ## 主要腳本
 
@@ -51,6 +57,7 @@ npm run test:e2e:report
 
 - `FNB_PUBLIC_BASE_URL`
 - `FNB_INTERNAL_API_TOKEN`
+- `OFFICE_ADMIN_TOKEN`（設了之後，Office 寫入 API 需要 `x-office-token` 或 `/api/office/session` cookie）
 - `FNB_APP_ENV`
 - `FNB_DEMO_MODE`
 - `DATABASE_URL`（有值時走 Postgres，否則 SQLite）
@@ -87,6 +94,8 @@ npm run test:e2e:report
 - `GET /api/fnb/merchant/customers`
 - `POST /api/fnb/merchant/customers/:id/notes`
 - `POST /api/fnb/merchant/customers/:id/tags`
+- `GET /api/office/session`
+- `POST /api/office/session`
 
 ## 資料層
 

@@ -92,8 +92,8 @@
 正式切網域前，先在新服務的 Render 預設網址驗證：
 
 - `/api/health`
-- `/office`
-- `/browser`
+- `/office`（Boss Inbox）
+- `/browser`（若有設 `OFFICE_ADMIN_TOKEN`，需先完成 Office access）
 - merchant / ops 入口
 - worker 正常跑
 - LINE Login callback 沒壞

@@ -1,10 +1,17 @@
 import { getAttentionItemById, runAttentionAction } from '../../../../../lib/boss-inbox.js'
 import { getAttentionStateById } from '../../../../../lib/db.js'
+import { assertOfficeApiRequest, getOfficeRequestErrorStatus } from '../../../../../lib/office-route-auth.js'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
+  try {
+    assertOfficeApiRequest(request)
+  } catch (error) {
+    return Response.json({ error: error.message || 'Unauthorized office request' }, { status: getOfficeRequestErrorStatus(error, 401) })
+  }
+
   const item = getAttentionItemById(params?.id)
   if (item) {
     return Response.json({ success: true, attentionItem: item })
@@ -55,6 +62,12 @@ export async function GET(_request, { params }) {
 }
 
 export async function POST(request, { params }) {
+  try {
+    assertOfficeApiRequest(request)
+  } catch (error) {
+    return Response.json({ error: error.message || 'Unauthorized office request' }, { status: getOfficeRequestErrorStatus(error, 401) })
+  }
+
   const body = await request.json().catch(() => ({}))
   const action = String(body?.action || '').toLowerCase()
 
