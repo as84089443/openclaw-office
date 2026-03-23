@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   openclaw-copilot-tunnel:
     container_name: openclaw-copilot-tunnel

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   openclaw-office:
     container_name: openclaw-office
