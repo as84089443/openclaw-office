@@ -1,8 +1,8 @@
 import FnbOpsConsole from '../../components/FnbOpsConsole'
 
 export const metadata = {
-  title: 'BW Copilot Ops',
-  description: 'Internal operations console for the OpenClaw BW Copilot.',
+  title: '營運總覽 | BW Copilot',
+  description: '給客服、代操與營運團隊使用的工作台。',
 }
 
 export default function OpsPage() {

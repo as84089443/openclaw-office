@@ -64,12 +64,12 @@ function PipelineColumn({ title, tone, icon: Icon, items, emptyText }) {
             <div key={item.id} className="rounded-lg border border-white/5 bg-black/20 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-white">{item.title}</div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{item.channel}</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{formatTokenLabel(item.channel)}</div>
               </div>
               <div className="mt-2 text-xs text-gray-400">{item.body}</div>
               <div className="mt-3 flex items-center gap-3 text-[11px] text-gray-500">
-                <span>risk {Math.round((item.riskScore || 0) * 100)}%</span>
-                <span>{item.draftType}</span>
+                <span>風險 {Math.round((item.riskScore || 0) * 100)}%</span>
+                <span>{formatTokenLabel(item.draftType)}</span>
               </div>
             </div>
           ))
@@ -199,6 +199,46 @@ function formatDate(value) {
   }).format(new Date(value))
 }
 
+function humanizeToken(value) {
+  const token = String(value || '').trim()
+  if (!token) return '未提供'
+  return token.replace(/[-_]/g, ' ')
+}
+
+const TOKEN_LABELS = {
+  postgres: '正式資料庫',
+  sqlite: '本機資料庫',
+  staging: '測試環境',
+  production: '正式環境',
+  development: '開發環境',
+  growth: '成長方案',
+  connected: '已連上',
+  planned: '規劃中',
+  pending: '待處理',
+  queued: '排隊中',
+  completed: '已完成',
+  failed: '未完成',
+  'ops-review': '待營運覆核',
+  assigned: '已指派',
+  open: '待處理',
+  owner: '店主',
+  system: '系統',
+  merchant: '店家',
+  auto: '自動處理',
+  manual: '人工確認',
+  assisted: '協助判讀',
+  draft: '草稿',
+  published: '已發佈',
+  'google-business-profile': 'Google 商家',
+  line: 'LINE',
+}
+
+function formatTokenLabel(value, fallback = '未提供') {
+  const token = String(value || '').trim()
+  if (!token) return fallback
+  return TOKEN_LABELS[token] || humanizeToken(token)
+}
+
 export default function FnbOpsConsole() {
   const [snapshot, setSnapshot] = useState(null)
   const [locations, setLocations] = useState([])
@@ -220,7 +260,7 @@ export default function FnbOpsConsole() {
     setSelectedLocationId(data.snapshot?.location?.id || data.defaultLocationId || '')
   }, [])
 
-  const handleUnauthorized = useCallback((message = '需要內部 admin token 才能存取 ops。') => {
+  const handleUnauthorized = useCallback((message = '需要內部營運驗證碼才能查看這頁。') => {
     setAuthRequired(true)
     setSnapshot(null)
     setLocations([])
@@ -235,11 +275,11 @@ export default function FnbOpsConsole() {
       const response = await fetch(`/api/fnb/ops${params.size ? `?${params.toString()}` : ''}`)
       const data = await response.json()
       if (response.status === 401) {
-        handleUnauthorized(data.error || '需要內部 admin token 才能存取 ops。')
+        handleUnauthorized(data.error || '需要內部營運驗證碼才能查看這頁。')
         return
       }
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || 'Failed to load F&B ops snapshot')
+        throw new Error(data.error || '無法讀取目前的營運總覽')
       }
       setAuthRequired(false)
       applyOpsResponse(data)
@@ -270,11 +310,11 @@ export default function FnbOpsConsole() {
       })
       const data = await response.json()
       if (response.status === 401) {
-        handleUnauthorized(data.error || '需要內部 admin token 才能執行營運操作。')
+        handleUnauthorized(data.error || '需要內部營運驗證碼才能執行這些操作。')
         return null
       }
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || `Action failed: ${action}`)
+        throw new Error(data.error || '這個操作目前沒有成功，請再試一次')
       }
       setAuthRequired(false)
       applyOpsResponse(data)
@@ -295,7 +335,7 @@ export default function FnbOpsConsole() {
   const submitOpsAuth = useCallback(async () => {
     const trimmed = authToken.trim()
     if (!trimmed) {
-      setError('請輸入 FNB_INTERNAL_API_TOKEN。')
+      setError('請輸入內部營運驗證碼。')
       return
     }
 
@@ -308,7 +348,7 @@ export default function FnbOpsConsole() {
       })
       const data = await response.json()
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || 'Ops auth failed')
+        throw new Error(data.error || '驗證失敗，請再試一次')
       }
       setAuthRequired(false)
       setAuthToken('')
@@ -351,7 +391,7 @@ export default function FnbOpsConsole() {
       restaurantType: onboardingForm.restaurantType.trim() || '餐飲',
       address: onboardingForm.address.trim(),
       ownerName: onboardingForm.ownerName.trim() || '店主',
-      primaryGoal: onboardingForm.primaryGoal.trim() || '穩定回流與 Google 更新',
+      primaryGoal: onboardingForm.primaryGoal.trim() || '穩定回流與 Google 商家更新',
       toneSummary: onboardingForm.voice.trim() || '直接、溫暖、不過度推銷',
       voice: onboardingForm.voice.trim() || '直接、溫暖、不過度推銷',
       signatureItems: parseCsvText(onboardingForm.signatureItemsText),
@@ -383,7 +423,7 @@ export default function FnbOpsConsole() {
   const activeLinks = inviteLinks || snapshot?.links || null
   const currentProvider = snapshot?.workspace?.provider || serviceStatus?.provider || 'sqlite'
   const providerTone = currentProvider === 'postgres' ? '#39ff14' : '#ffb703'
-  const providerLabel = currentProvider === 'postgres' ? 'Postgres' : 'SQLite'
+  const providerLabel = formatTokenLabel(currentProvider)
   const currentEnvironment = snapshot?.workspace?.environment || serviceStatus?.environment || 'staging'
   const workspaceLocations = snapshot?.locations || locations
   const canRunActions = Boolean(activeLocationId)
@@ -397,21 +437,21 @@ export default function FnbOpsConsole() {
     },
     {
       key: 'line',
-      label: 'LINE Messaging',
+      label: 'LINE 通知',
       value: serviceStatus?.lineConfigured ? '已設定' : '未設定',
       ready: Boolean(serviceStatus?.lineConfigured),
       tone: '#00f5ff',
     },
     {
       key: 'line-login',
-      label: 'LINE Login / LIFF',
+      label: 'LINE 登入與 LIFF',
       value: serviceStatus?.lineLoginConfigured && serviceStatus?.liffConfigured ? '已設定' : '未設定',
       ready: Boolean(serviceStatus?.lineLoginConfigured && serviceStatus?.liffConfigured),
       tone: '#39ff14',
     },
     {
       key: 'google',
-      label: 'Google Business',
+      label: 'Google 商家',
       value: serviceStatus?.googleConfigured ? '已設定' : '待接線',
       ready: Boolean(serviceStatus?.googleConfigured),
       tone: '#ffb703',
@@ -451,16 +491,16 @@ export default function FnbOpsConsole() {
           <div>
             <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
               <ShieldAlert className="h-4 w-4" />
-              <span>Internal Ops Access Required</span>
+              <span>需要營運權限</span>
             </div>
-            <h2 className="font-display text-3xl text-white">輸入內部 admin token</h2>
+            <h2 className="font-display text-3xl text-white">輸入內部營運驗證碼</h2>
             <p className="mt-3 text-sm leading-7 text-gray-300">
-              `/ops` 與營運 API 現在只接受 `FNB_INTERNAL_API_TOKEN`。驗證成功後會建立一個 httpOnly session，
-              之後同一瀏覽器就不需要重複輸入。
+              這頁和相關營運 API 現在只接受 `FNB_INTERNAL_API_TOKEN`。驗證成功後會在這個瀏覽器建立登入狀態，
+              之後就不需要重複輸入。
             </p>
           </div>
 
-          <Field label="Admin Token" hint="使用 Render 或 .env.local 裡的 FNB_INTERNAL_API_TOKEN。">
+          <Field label="營運驗證碼" hint="使用 Render 或 `.env.local` 裡的 `FNB_INTERNAL_API_TOKEN`。">
             <TextInput
               type="password"
               value={authToken}
@@ -478,7 +518,7 @@ export default function FnbOpsConsole() {
           <div className="flex flex-wrap gap-3">
             <ActionButton onClick={submitOpsAuth} disabled={authBusy} tone="#00f5ff">
               <ShieldAlert className="mr-1 inline h-4 w-4" />
-              驗證並進入 ops
+              驗證並進入營運總覽
             </ActionButton>
           </div>
         </div>
@@ -497,21 +537,21 @@ export default function FnbOpsConsole() {
             </div>
             <h2 className="font-display text-3xl text-white">
               {snapshot?.location?.name || '建立第一間試點商家'}
-              <span className="ml-3 text-base text-gray-500">{snapshot?.location?.restaurantType || 'Pilot onboarding'}</span>
+              <span className="ml-3 text-base text-gray-500">{snapshot?.location?.restaurantType || '試點導入中'}</span>
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-gray-300">
               目標是讓店家每週只花 15 分鐘內處理必要決策。系統先自動排出內容、推播與回流動作，
               只有高風險與缺資料的情況才打擾店家。
             </p>
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-400">
-              <span className="rounded-full border border-white/10 px-3 py-1">Tenant: {snapshot?.tenant?.name || '尚未建立'}</span>
-              <span className="rounded-full border border-white/10 px-3 py-1">Plan: {snapshot?.tenant?.plan || 'growth'}</span>
+              <span className="rounded-full border border-white/10 px-3 py-1">品牌：{snapshot?.tenant?.name || '尚未建立'}</span>
+              <span className="rounded-full border border-white/10 px-3 py-1">方案：{formatTokenLabel(snapshot?.tenant?.plan || 'growth')}</span>
               <span className="rounded-full border border-white/10 px-3 py-1">主工作面: LINE 對話式 Copilot</span>
               <span className="rounded-full border px-3 py-1" style={{ borderColor: `${providerTone}55`, color: providerTone }}>
-                {providerLabel} · {currentEnvironment}
+                {providerLabel} · {formatTokenLabel(currentEnvironment)}
               </span>
               {snapshot?.workspace?.demoMode || serviceStatus?.demoMode ? (
-                <span className="rounded-full border border-yellow-500/40 px-3 py-1 text-yellow-300">demo mode</span>
+                <span className="rounded-full border border-yellow-500/40 px-3 py-1 text-yellow-300">展示模式</span>
               ) : null}
             </div>
           </div>
@@ -519,15 +559,15 @@ export default function FnbOpsConsole() {
           <div className="flex flex-wrap items-center gap-3">
             <ActionButton onClick={logoutOpsAuth} disabled={Boolean(busyAction) || authBusy} tone="#fb7185">
               <ShieldAlert className="mr-1 inline h-4 w-4" />
-              登出 ops
+              登出營運權限
             </ActionButton>
             <ActionButton onClick={() => postAction('generate-plan')} disabled={Boolean(busyAction) || !canRunActions} tone="#ffb703">
               <CalendarRange className="mr-1 inline h-4 w-4" />
-              產新一週計畫
+              產出本週計畫
             </ActionButton>
             <ActionButton onClick={() => postAction('run-autopilot')} disabled={Boolean(busyAction) || !canRunActions} tone="#00f5ff">
               <Bot className="mr-1 inline h-4 w-4" />
-              執行 Autopilot
+              執行自動排程
             </ActionButton>
             <ActionButton onClick={() => postAction('generate-digest')} disabled={Boolean(busyAction) || !canRunActions} tone="#39ff14">
               <Sparkles className="mr-1 inline h-4 w-4" />
@@ -618,7 +658,7 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <NotebookPen className="h-4 w-4 text-cyan-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Real Merchant Onboarding</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">店家導入設定</div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="租戶名稱" hint="通常是品牌或經營主體。">
@@ -628,7 +668,7 @@ export default function FnbOpsConsole() {
                 placeholder="例：鼎湯餐飲集團"
               />
             </Field>
-            <Field label="店點名稱" hint="會成為真正的 location。">
+            <Field label="店點名稱" hint="會成為實際使用的店點資料。">
               <TextInput
                 value={onboardingForm.locationName}
                 onChange={(event) => updateOnboardingField('locationName', event.target.value)}
@@ -642,21 +682,21 @@ export default function FnbOpsConsole() {
                 placeholder="小吃 / 咖啡 / 便當"
               />
             </Field>
-            <Field label="店主名稱" hint="會成為預設 owner/operator。">
+            <Field label="店主名稱" hint="會成為預設負責人。">
               <TextInput
                 value={onboardingForm.ownerName}
                 onChange={(event) => updateOnboardingField('ownerName', event.target.value)}
                 placeholder="王老闆"
               />
             </Field>
-            <Field label="地址" hint="先填店址，方便後續 Google Business 綁定。">
+            <Field label="地址" hint="先填店址，方便後續 Google 商家綁定。">
               <TextInput
                 value={onboardingForm.address}
                 onChange={(event) => updateOnboardingField('address', event.target.value)}
                 placeholder="台北市大同區..."
               />
             </Field>
-            <Field label="Google Business Location Name" hint="如果已有 GBP，可先填正式 locationName。">
+            <Field label="Google 商家位置名稱" hint="如果已經有 Google 商家，可先填正式的位置名稱。">
               <TextInput
                 value={onboardingForm.googleLocationName}
                 onChange={(event) => updateOnboardingField('googleLocationName', event.target.value)}
@@ -667,7 +707,7 @@ export default function FnbOpsConsole() {
               <TextInput
                 value={onboardingForm.primaryGoal}
                 onChange={(event) => updateOnboardingField('primaryGoal', event.target.value)}
-                placeholder="穩定回流與 Google 更新"
+                placeholder="穩定回流與 Google 商家更新"
               />
             </Field>
             <Field label="品牌語氣" hint="簡短描述即可。">
@@ -684,7 +724,7 @@ export default function FnbOpsConsole() {
                 placeholder="牛肉麵, 滷味拼盤"
               />
             </Field>
-            <Field label="Guardrails" hint="用逗號分隔。">
+            <Field label="提醒守則" hint="用逗號分隔。">
               <TextInput
                 value={onboardingForm.guardrailsText}
                 onChange={(event) => updateOnboardingField('guardrailsText', event.target.value)}
@@ -718,7 +758,7 @@ export default function FnbOpsConsole() {
                 placeholder={'牛肉麵|主食|220|招牌\n燙青菜|小菜|60|'}
               />
             </Field>
-            <Field label="內部備註" hint="只留給 ops 參考。">
+            <Field label="內部備註" hint="只留給營運團隊參考。">
               <TextAreaInput
                 rows={3}
                 value={onboardingForm.notes}
@@ -741,7 +781,7 @@ export default function FnbOpsConsole() {
               清空表單
             </ActionButton>
             <div className="text-xs text-gray-500">
-              建立後會自動產生 merchant bind link、ops deep link 與 location。
+              建立後會自動產生店家綁定入口、營運入口與店點資料。
             </div>
           </div>
         </div>
@@ -750,7 +790,7 @@ export default function FnbOpsConsole() {
           <div className="glass-card rounded-xl p-5">
             <div className="mb-4 flex items-center gap-2">
               <Link2 className="h-4 w-4 text-green-300" />
-              <div className="text-sm uppercase tracking-[0.18em] text-green-300">Workspace Status</div>
+              <div className="text-sm uppercase tracking-[0.18em] text-green-300">工作區狀態</div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {setupStatusItems.map((item) => (
@@ -765,7 +805,7 @@ export default function FnbOpsConsole() {
                         color: item.ready ? item.tone : '#fbbf24',
                       }}
                     >
-                      {item.ready ? 'ready' : 'todo'}
+                      {item.ready ? '已就緒' : '待補齊'}
                     </div>
                   </div>
                 </div>
@@ -773,39 +813,39 @@ export default function FnbOpsConsole() {
             </div>
             <div className="mt-4 rounded-lg border border-white/5 bg-black/20 px-4 py-3 text-sm text-gray-300">
               {currentProvider === 'postgres'
-                ? '現在已經是 Postgres-ready 工作模式，適合開始接真實 pilot 商家。'
-                : '目前仍在 SQLite 模式，適合本機與單機 tunnel。若要多店長期運行，下一步應切到 Postgres。'}
+                ? '目前已經是正式資料庫模式，適合開始接真實試點商家。'
+                : '目前仍是本機資料庫模式，適合本地測試與單機使用。若要多店長期運行，下一步建議切到正式資料庫。'}
             </div>
           </div>
 
           <div className="glass-card rounded-xl p-5">
             <div className="mb-4 flex items-center gap-2">
               <ExternalLink className="h-4 w-4 text-cyan-300" />
-              <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Merchant Entry Links</div>
+              <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">店家入口連結</div>
             </div>
             {activeLinks ? (
               <div className="space-y-3">
                 <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-                  <div className="text-xs text-gray-500">Merchant bind URL</div>
+                  <div className="text-xs text-gray-500">店家綁定網址</div>
                   <div className="mt-2 break-all text-sm text-white">{activeLinks.merchantBindUrl}</div>
                 </div>
                 <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-                  <div className="text-xs text-gray-500">Merchant dashboard</div>
+                  <div className="text-xs text-gray-500">店家工作台</div>
                   <div className="mt-2 break-all text-sm text-white">{activeLinks.merchantDashboardUrl}</div>
                 </div>
                 <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-                  <div className="text-xs text-gray-500">Ops dashboard</div>
+                  <div className="text-xs text-gray-500">營運總覽</div>
                   <div className="mt-2 break-all text-sm text-white">{activeLinks.opsDashboardUrl}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <ActionLink href={activeLinks.merchantBindUrl} tone="#00f5ff">開啟綁定入口</ActionLink>
                   <ActionLink href={activeLinks.merchantDashboardUrl} tone="#39ff14">開啟商家面</ActionLink>
-                  <ActionLink href={activeLinks.opsDashboardUrl} tone="#ffb703">開啟 ops</ActionLink>
+                  <ActionLink href={activeLinks.opsDashboardUrl} tone="#ffb703">開啟營運總覽</ActionLink>
                 </div>
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
-                建立第一個商家或切換 location 後，這裡會顯示對應的 bind link 與 dashboard deep links。
+                建立第一個商家或切換店點後，這裡會顯示對應的綁定入口和各頁連結。
               </div>
             )}
           </div>
@@ -817,7 +857,7 @@ export default function FnbOpsConsole() {
           <div className="mx-auto max-w-2xl">
             <div className="text-lg font-semibold text-white">目前還沒有商家 location</div>
             <div className="mt-3 text-sm leading-7 text-gray-400">
-              先用上方 onboarding 建立第一家試點店。建立後，ops 會切到該 location，並產生商家綁定入口與後續的 Autopilot 流程。
+              先用上方導入表單建立第一家試點店。建立後，頁面會切到該店點，並產生商家綁定入口與後續的自動流程。
             </div>
           </div>
         </div>
@@ -830,11 +870,11 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-green-300">Pilot KPIs</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-green-300">本週重點指標</div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg bg-black/20 p-3">
-              <div className="text-xs text-gray-500">Autopilot 成功率</div>
+              <div className="text-xs text-gray-500">自動處理成功率</div>
               <div className="mt-1 text-xl font-bold text-white">{snapshot?.kpis?.autopilotSuccessRate || 0}%</div>
             </div>
             <div className="rounded-lg bg-black/20 p-3">
@@ -855,7 +895,7 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <TriangleAlert className="h-4 w-4 text-orange-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-orange-300">Onboarding & Alerts</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-orange-300">導入進度與提醒</div>
           </div>
           <div className="grid gap-4 lg:grid-cols-[0.95fr,1.05fr]">
             <div className="space-y-3">
@@ -863,7 +903,7 @@ export default function FnbOpsConsole() {
                 <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-3">
                   <div className="text-sm text-white">{item.label}</div>
                   <div className={`text-xs font-semibold ${item.done ? 'text-green-300' : 'text-yellow-300'}`}>
-                    {item.done ? 'done' : 'todo'}
+                    {item.done ? '已完成' : '待處理'}
                   </div>
                 </div>
               ))}
@@ -881,7 +921,7 @@ export default function FnbOpsConsole() {
                 <div key={alert.id} className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3">
                   <div className="text-sm font-semibold text-white">{alert.message}</div>
                   <div className="mt-2 text-[11px] uppercase tracking-[0.18em] text-orange-300">
-                    {alert.severity} · {alert.code}
+                    {formatTokenLabel(alert.severity)} · {alert.code}
                   </div>
                 </div>
               )) : (
@@ -898,11 +938,11 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm uppercase tracking-[0.18em] text-cyan-400">Merchant Copilot Inbox</div>
-              <div className="mt-1 text-sm text-gray-400">店家主要只會在 LINE 看到這些卡片與摘要。</div>
+              <div className="text-sm uppercase tracking-[0.18em] text-cyan-400">店家訊息收件匣</div>
+              <div className="mt-1 text-sm text-gray-400">店家平常主要只會在 LINE 看到這些卡片與摘要。</div>
             </div>
             <div className="rounded-full border border-cyan-500/30 px-3 py-1 text-xs text-cyan-300">
-              {snapshot?.pendingApprovals?.length || 0} pending
+              待確認 {snapshot?.pendingApprovals?.length || 0} 件
             </div>
           </div>
 
@@ -920,8 +960,8 @@ export default function FnbOpsConsole() {
                         {approval.merchantMessage}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
-                        <span>route: {approval.route}</span>
-                        <span>risk: {Math.round((approval.riskScore || 0) * 100)}%</span>
+                        <span>送達方式: {formatTokenLabel(approval.route)}</span>
+                        <span>風險: {Math.round((approval.riskScore || 0) * 100)}%</span>
                         <span>預計: {formatDate(approval.scheduledFor)}</span>
                       </div>
                     </div>
@@ -1005,7 +1045,7 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-green-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-green-300">Weekly Digest</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-green-300">本週摘要</div>
           </div>
           {snapshot?.latestDigest ? (
             <div className="space-y-4">
@@ -1081,8 +1121,8 @@ export default function FnbOpsConsole() {
       <div className="glass-card rounded-xl p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Merchant NL Copilot</div>
-            <div className="mt-1 text-sm text-gray-400">商家自然語言任務、卡住原因與 OpenClaw handoff 狀態。</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">商家對話任務</div>
+            <div className="mt-1 text-sm text-gray-400">商家自然語言任務、卡住原因與目前交接狀態。</div>
           </div>
           <div className="flex items-center gap-2">
             <ActionButton
@@ -1094,7 +1134,7 @@ export default function FnbOpsConsole() {
               處理下一筆
             </ActionButton>
             <div className="rounded-full border border-cyan-500/30 px-3 py-1 text-xs text-cyan-300">
-              {snapshot?.merchantCopilot?.tasks?.length || 0} tasks
+              待處理 {snapshot?.merchantCopilot?.tasks?.length || 0} 件
             </div>
           </div>
         </div>
@@ -1107,15 +1147,15 @@ export default function FnbOpsConsole() {
                   <div>
                     <div className="flex items-center gap-2">
                       <Bot className="h-4 w-4 text-cyan-300" />
-                      <div className="font-semibold text-white">{task.title || 'Merchant Copilot 任務'}</div>
+                      <div className="font-semibold text-white">{task.title || '商家對話任務'}</div>
                     </div>
                     <div className="mt-2 text-sm leading-7 text-gray-300">{task.instructionText}</div>
                     <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
-                      <span>type: {task.taskType}</span>
-                      <span>status: {task.status}</span>
-                      <span>assigned: {task.assignedTo || 'unassigned'}</span>
+                      <span>類型: {formatTokenLabel(task.taskType)}</span>
+                      <span>狀態: {formatTokenLabel(task.status)}</span>
+                      <span>指派給: {formatTokenLabel(task.assignedTo, '尚未指派')}</span>
                       {task.confidence !== null && task.confidence !== undefined ? (
-                        <span>confidence: {Math.round(task.confidence * 100)}%</span>
+                        <span>信心: {Math.round(task.confidence * 100)}%</span>
                       ) : null}
                     </div>
                   </div>
@@ -1126,7 +1166,7 @@ export default function FnbOpsConsole() {
                       color: task.status === 'completed' ? '#39ff14' : task.status === 'ops-review' || task.status === 'failed' ? '#fb7185' : '#00f5ff',
                     }}
                   >
-                    {task.status}
+                    {formatTokenLabel(task.status)}
                   </div>
                 </div>
 
@@ -1147,28 +1187,28 @@ export default function FnbOpsConsole() {
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
-            目前沒有新的 Merchant Copilot 任務。
+            目前沒有新的商家對話任務。
           </div>
         )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <PipelineColumn
-          title="Auto Send"
+          title="自動送出"
           tone="#00f5ff"
           icon={Send}
           items={snapshot?.pipeline?.autoSend || []}
           emptyText="目前沒有待自動發送的草稿。"
         />
         <PipelineColumn
-          title="Merchant Approve"
+          title="待店家確認"
           tone="#ffb703"
           icon={CircleDashed}
           items={snapshot?.pipeline?.merchantApprove || []}
           emptyText="目前沒有卡在店家手上的決策。"
         />
         <PipelineColumn
-          title="Ops Review"
+          title="待營運覆核"
           tone="#fb7185"
           icon={ShieldAlert}
           items={snapshot?.pipeline?.opsReview || []}
@@ -1180,7 +1220,7 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <TriangleAlert className="h-4 w-4 text-orange-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-orange-300">Channel Health & Rules</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-orange-300">渠道狀態與規則</div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -1196,11 +1236,11 @@ export default function FnbOpsConsole() {
                           ? 'border border-yellow-500/40 text-yellow-300'
                           : 'border border-red-500/40 text-red-300'
                     }`}>
-                      {channel.status}
+                      {formatTokenLabel(channel.status)}
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-400">
-                    {channel.metadata?.accountName || channel.metadata?.listingName || channel.metadata?.note || 'No details'}
+                    {channel.metadata?.accountName || channel.metadata?.listingName || channel.metadata?.note || '暫無說明'}
                   </div>
                 </div>
               ))}
@@ -1211,10 +1251,12 @@ export default function FnbOpsConsole() {
                 <div key={rule.id} className="rounded-lg border border-white/5 bg-black/20 p-3">
                   <div className="text-sm font-semibold text-white">{rule.name}</div>
                   <div className="mt-2 text-xs text-gray-500">
-                    {rule.actionMode} · tolerance {Math.round(rule.riskTolerance * 100)}%
+                    {formatTokenLabel(rule.actionMode)} · 風險容忍 {Math.round(rule.riskTolerance * 100)}%
                   </div>
                   <div className="mt-2 text-xs text-gray-400">
-                    {rule.config?.draftTypes?.join(', ') || 'all draft types'}
+                    {(rule.config?.draftTypes || []).length
+                      ? rule.config.draftTypes.map((type) => formatTokenLabel(type)).join('、')
+                      : '所有草稿類型'}
                   </div>
                 </div>
               ))}
@@ -1225,7 +1267,7 @@ export default function FnbOpsConsole() {
         <div className="glass-card rounded-xl p-5">
           <div className="mb-4 flex items-center gap-2">
             <Bot className="h-4 w-4 text-purple-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-purple-300">Ops Audit Trail</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-purple-300">操作紀錄</div>
           </div>
           <div className="space-y-3">
             {snapshot?.audits?.map((audit) => (
@@ -1235,7 +1277,7 @@ export default function FnbOpsConsole() {
                   <div className="text-[10px] text-gray-500">{formatDate(audit.createdAt)}</div>
                 </div>
                 <div className="mt-2 text-xs text-gray-400">
-                  {audit.actorType} → {audit.entityType}
+                  {formatTokenLabel(audit.actorType)} → {formatTokenLabel(audit.entityType)}
                   {audit.entityId ? ` (${audit.entityId.slice(0, 8)})` : ''}
                 </div>
               </div>

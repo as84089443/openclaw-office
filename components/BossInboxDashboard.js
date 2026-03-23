@@ -5,19 +5,81 @@ import { motion } from 'framer-motion'
 import { AlertTriangle, BriefcaseBusiness, Clock3, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
 
 const TYPE_META = {
-  decision: { label: '待決策', color: '#f59e0b', icon: Clock3 },
-  blocked: { label: '阻塞', color: '#ef4444', icon: AlertTriangle },
+  decision: { label: '待拍板', color: '#f59e0b', icon: Clock3 },
+  blocked: { label: '卡住', color: '#ef4444', icon: AlertTriangle },
   risk: { label: '風險', color: '#f97316', icon: ShieldAlert },
   opportunity: { label: '商機', color: '#22c55e', icon: BriefcaseBusiness },
   digest_only: { label: '摘要', color: '#64748b', icon: Sparkles },
 }
 
 const ACTION_LABEL = {
-  create_task: 'Create Task',
-  acknowledge: 'Acknowledge',
-  resolve: 'Resolve',
-  reopen: 'Reopen',
-  snooze: 'Snooze 24h',
+  create_task: '交辦跟進',
+  acknowledge: '先記下',
+  resolve: '標記完成',
+  reopen: '重新打開',
+  snooze: '明天再看',
+}
+
+const ITEM_STATUS_LABEL = {
+  open: '待處理',
+  acknowledged: '已記下',
+  resolved: '已處理',
+  snoozed: '稍後再看',
+  reopened: '重新打開',
+  closed: '已關閉',
+}
+
+const WORKFLOW_STATUS_LABEL = {
+  open: '待處理',
+  pending: '待處理',
+  task_created: '已建立交辦',
+  assigned: '已指派',
+  in_progress: '進行中',
+  completed: '已完成',
+  failed: '未完成',
+  snoozed: '稍後再看',
+  acknowledged: '已記下',
+  resolved: '已處理',
+  approved: '已同意',
+  rejected: '已退回',
+  applied: '已套用',
+  rolled_back: '已還原',
+}
+
+const REVIEW_STATUS_LABEL = {
+  pending: '待確認',
+  approved: '已同意',
+  rejected: '已退回',
+}
+
+const APPLY_STATUS_LABEL = {
+  applied: '已套用',
+  rolled_back: '已還原',
+  not_applied: '尚未套用',
+}
+
+const CANDIDATE_KIND_LABEL = {
+  recurring: '例行調整',
+  one_off: '單次調整',
+  prompt: '提示詞調整',
+  heartbeat: '節奏調整',
+  knowledge: '知識補強',
+}
+
+const ACCESS_SOURCE_LABEL = {
+  cookie: '瀏覽器登入',
+  session: '瀏覽器登入',
+  header: '手動驗證',
+  disabled: '未啟用',
+}
+
+const DELIVERY_STATUS_LABEL = {
+  pending: '待送達',
+  queued: '準備中',
+  sent: '已送出',
+  delivered: '已送達',
+  success: '已送達',
+  failed: '送達失敗',
 }
 
 function toPriorityOrder(value) {
@@ -63,7 +125,40 @@ function deriveRecommendedAction(item, hint = null) {
 
 function formatTime(ts) {
   if (!ts) return '—'
-  return new Date(ts).toLocaleString()
+  return new Date(ts).toLocaleString('zh-TW', {
+    hour12: false,
+  })
+}
+
+function humanizeToken(value) {
+  const token = String(value || '').trim()
+  if (!token) return '—'
+  return token.replaceAll('_', ' ')
+}
+
+function formatStatusLabel(value, labels, fallback = '—') {
+  const token = String(value || '').trim()
+  if (!token) return fallback
+  return labels[token] || humanizeToken(token)
+}
+
+function formatCandidateKind(value) {
+  const token = String(value || '').trim()
+  if (!token) return CANDIDATE_KIND_LABEL.recurring
+  return CANDIDATE_KIND_LABEL[token] || humanizeToken(token)
+}
+
+function formatAuthSource(value) {
+  return formatStatusLabel(value, ACCESS_SOURCE_LABEL, '未啟用')
+}
+
+function formatDeliveryStatus(value) {
+  return formatStatusLabel(value, DELIVERY_STATUS_LABEL, '待送達')
+}
+
+function formatAutonomyLabel(label, level) {
+  if (label) return label
+  return `第 ${level || 1} 階段`
 }
 
 function formatHintActionScores(actionScores = []) {
@@ -82,6 +177,31 @@ function formatHintActionScores(actionScores = []) {
       }
     })
     .filter(Boolean)
+}
+
+function formatUrgencyReason(item, actionHint) {
+  if (!actionHint?.shouldBlock) return null
+
+  if (item.source === 'stale-agent') {
+    return '這條魚超過 24 小時沒有新學習或回報，先確認是不是斷線、沒資料，或回報停住了。'
+  }
+
+  if (item.attentionType === 'blocked') {
+    return '這件事目前卡住後續流程，不先解開，後面就很難往下走。'
+  }
+
+  if (item.attentionType === 'risk') {
+    return '這張被列為風險，先確認處理方向，才不會讓問題繼續放大。'
+  }
+
+  return '這件事會影響後續安排，所以建議先處理。'
+}
+
+function withSelectedAgent(agentOptions = [], selectedAgentId) {
+  const selected = String(selectedAgentId || '').trim()
+  if (!selected) return agentOptions
+  if (agentOptions.some((agent) => agent.id === selected)) return agentOptions
+  return [{ id: selected, name: humanizeToken(selected), emoji: '🗂️' }, ...agentOptions]
 }
 
 function CountCard({ label, value, color, Icon }) {
@@ -113,22 +233,22 @@ function OfficeAccessPanel({
     <div className="glass-card rounded-2xl p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Office Access</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">辦公室權限</div>
           <div className="mt-2 text-sm text-white">
             {access.authenticated
-              ? '這個瀏覽器已經取得 Office 寫入權限。Boss Inbox 的操作會直接走 session cookie。'
-              : 'Office 寫入 API 已啟用保護。貼上 Office token 後，這個瀏覽器就能直接操作 Boss Inbox。'}
+              ? '這個瀏覽器已經可以直接處理老闆收件匣裡的項目。'
+              : '這個頁面目前有保護機制。貼上驗證碼後，這個瀏覽器就能直接處理老闆收件匣。'}
           </div>
           <div className="mt-2 text-[11px] text-gray-400">
-            header: <code>x-office-token</code>
-            {access.authSource ? ` / current: ${access.authSource}` : ''}
+            驗證方式: <code>x-office-token</code>
+            {access.authSource ? ` / 目前: ${formatAuthSource(access.authSource)}` : ''}
           </div>
         </div>
 
         {access.authenticated ? (
           <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-emerald-200">
-              Authorized
+              已授權
             </div>
             <button
               type="button"
@@ -136,7 +256,7 @@ function OfficeAccessPanel({
               onClick={onLogout}
               className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {busy ? 'Signing Out...' : 'Clear Access'}
+              {busy ? '清除中...' : '清除授權'}
             </button>
           </div>
         ) : (
@@ -145,7 +265,7 @@ function OfficeAccessPanel({
               type="password"
               value={tokenDraft}
               onChange={(event) => onTokenChange(event.target.value)}
-              placeholder="Paste OFFICE_ADMIN_TOKEN"
+              placeholder="貼上 Office 驗證碼"
               className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40 lg:min-w-[320px]"
             />
             <button
@@ -153,7 +273,7 @@ function OfficeAccessPanel({
               disabled={busy || !tokenDraft.trim()}
               className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {busy ? 'Authorizing...' : 'Authorize'}
+              {busy ? '驗證中...' : '確認'}
             </button>
           </form>
         )}
@@ -189,12 +309,15 @@ function AttentionRow({
   const meta = TYPE_META[item.attentionType] || TYPE_META.digest_only
   const Icon = meta.icon
   const recommendedAction = deriveRecommendedAction(item, actionHint)
-  const recommendedLabel = ACTION_LABEL[recommendedAction] || 'Action'
+  const recommendedLabel = ACTION_LABEL[recommendedAction] || '處理方式'
   const suggestedActionHint = formatHintActionScores(actionHint?.actionScores || []).find((entry) => entry.action === recommendedAction)
   const recommendedSuccess = Number.isFinite(suggestedActionHint?.success) ? suggestedActionHint.success : Number(actionHint?.expectedSuccess || 0)
   const recommendedDisabled = actionId !== null || !isHintActionAvailable(item, recommendedAction)
+  const urgencyReason = formatUrgencyReason(item, actionHint)
+  const ownerOptions = withSelectedAgent(agentOptions, ownerDraft)
+  const taskTargetOptions = withSelectedAgent(agentOptions, taskDraft?.targetAgent)
   const linkedTaskLabel = item.linkedTaskId
-    ? `${item.linkedTaskId}${item.linkedTaskStatus ? ` / ${item.linkedTaskStatus}` : ''}`
+    ? `${item.linkedTaskId}${item.linkedTaskStatus ? ` / ${formatStatusLabel(item.linkedTaskStatus, WORKFLOW_STATUS_LABEL)}` : ''}`
     : null
   return (
     <div className="rounded-xl border border-white/6 bg-black/20 p-4">
@@ -216,31 +339,30 @@ function AttentionRow({
           )}
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-gray-500">
             <span>更新: {formatTime(item.updatedAt)}</span>
-            {item.channel && <span>{item.channel}</span>}
-            {item.commercialValue > 0 && <span>估值 ${item.commercialValue.toLocaleString()}</span>}
+            {item.channel && <span>來自: {item.channel}</span>}
+            {item.commercialValue > 0 && <span>估計價值: ${item.commercialValue.toLocaleString()}</span>}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
-            <span>source: {item.source}</span>
-            <span>status: {item.status || 'open'}</span>
-            <span>signal: {item.signalScore || 0}</span>
-            <span>count: {item.signalCount || 1}</span>
-            {item.latestEventId && <span>event: {String(item.latestEventId).slice(0, 18)}...</span>}
+            {item.source && <span>來源: {humanizeToken(item.source)}</span>}
+            <span>目前狀態: {formatStatusLabel(item.status || 'open', ITEM_STATUS_LABEL)}</span>
+            <span>重要度: {item.signalScore || 0}</span>
+            <span>累積訊號: {item.signalCount || 1}</span>
           </div>
           {(item.assignedOwner || item.snoozedUntil || item.nextReviewAt) && (
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-300/80">
-              {item.assignedOwner && <span>owner: {item.assignedOwner}</span>}
-              {item.snoozedUntil && <span>snoozed: {formatTime(item.snoozedUntil)}</span>}
-              {item.nextReviewAt && <span>next review: {formatTime(item.nextReviewAt)}</span>}
+              {item.assignedOwner && <span>負責人: {item.assignedOwner}</span>}
+              {item.snoozedUntil && <span>延後到: {formatTime(item.snoozedUntil)}</span>}
+              {item.nextReviewAt && <span>下次檢視: {formatTime(item.nextReviewAt)}</span>}
             </div>
           )}
           {actionHint && (
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-cyan-100/80">
-              <span>hint: {recommendedLabel}</span>
+              <span>建議先做: {recommendedLabel}</span>
               {Number.isFinite(recommendedSuccess) && (
-                <span>success: {Math.round(recommendedSuccess * 100)}%</span>
+                <span>預估成功率: {Math.round(recommendedSuccess * 100)}%</span>
               )}
-              {actionHint?.recommendedOwner && <span>owner: {actionHint.recommendedOwner}</span>}
-              {actionHint?.shouldBlock && <span className="text-rose-200">blocking</span>}
+              {actionHint?.recommendedOwner && <span>建議負責人: {actionHint.recommendedOwner}</span>}
+              {urgencyReason && <span className="text-rose-200">優先原因: {urgencyReason}</span>}
             </div>
           )}
           {actionHint?.actionScores?.length > 0 && (
@@ -251,7 +373,7 @@ function AttentionRow({
                   className="rounded-full border border-cyan-400/25 px-2 py-0.5"
                   style={{ opacity: index === 0 ? 1 : 0.75 }}
                 >
-                  {index + 1}. {entry.actionLabel} {Math.round(entry.success * 100)}% / {Math.round(entry.score * 100)}
+                  {index + 1}. {entry.actionLabel} 成功率 {Math.round(entry.success * 100)}% / 綜合 {Math.round(entry.score * 100)}
                 </span>
               ))}
             </div>
@@ -267,8 +389,13 @@ function AttentionRow({
           )}
           {(item.linkedRequestId || item.linkedTaskId) && (
             <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-200">
-              {item.linkedRequestId && <div>request: {item.linkedRequestId}{item.linkedRequestState ? ` / ${item.linkedRequestState}` : ''}</div>}
-              {linkedTaskLabel && <div>task: {linkedTaskLabel}</div>}
+              {item.linkedRequestId && (
+                <div>
+                  交辦單: {item.linkedRequestId}
+                  {item.linkedRequestState ? ` / ${formatStatusLabel(item.linkedRequestState, WORKFLOW_STATUS_LABEL)}` : ''}
+                </div>
+              )}
+              {linkedTaskLabel && <div>執行單: {linkedTaskLabel}</div>}
             </div>
           )}
         </div>
@@ -296,7 +423,7 @@ function AttentionRow({
           }}
           className="rounded-lg border border-cyan-400/50 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {actionId === `${item.id}:${recommendedAction}` ? 'Running...' : `Recommended: ${recommendedLabel}`}
+          {actionId === `${item.id}:${recommendedAction}` ? '處理中...' : `建議先做：${recommendedLabel}`}
         </button>
         <button
           type="button"
@@ -304,7 +431,7 @@ function AttentionRow({
           onClick={() => onAttentionAction(item.id, 'acknowledge')}
           className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {actionId === `${item.id}:acknowledge` ? 'Acknowledging...' : 'Acknowledge'}
+          {actionId === `${item.id}:acknowledge` ? '記錄中...' : '先記下'}
         </button>
         <button
           type="button"
@@ -312,7 +439,7 @@ function AttentionRow({
           onClick={() => onOpenTaskDraft(item, actionHint)}
           className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {item.linkedTaskId ? 'Task Linked' : 'Create Task'}
+          {item.linkedTaskId ? '已交辦' : '交辦跟進'}
         </button>
         <button
           type="button"
@@ -320,7 +447,7 @@ function AttentionRow({
           onClick={() => onAttentionAction(item.id, 'resolve')}
           className="rounded-lg border border-emerald-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {actionId === `${item.id}:resolve` ? 'Resolving...' : 'Resolve'}
+          {actionId === `${item.id}:resolve` ? '完成中...' : '標記完成'}
         </button>
         <button
           type="button"
@@ -328,7 +455,7 @@ function AttentionRow({
           onClick={() => onAttentionAction(item.id, 'snooze', { snoozeHours: 24 })}
           className="rounded-lg border border-amber-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-amber-200 transition hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {actionId === `${item.id}:snooze` ? 'Snoozing...' : 'Snooze 24h'}
+          {actionId === `${item.id}:snooze` ? '延後中...' : '明天再看'}
         </button>
         {item.status !== 'open' && (
           <button
@@ -337,21 +464,21 @@ function AttentionRow({
             onClick={() => onAttentionAction(item.id, 'reopen')}
             className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {actionId === `${item.id}:reopen` ? 'Reopening...' : 'Reopen'}
+            {actionId === `${item.id}:reopen` ? '重新打開中...' : '重新打開'}
           </button>
         )}
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="text-xs text-gray-400">
-          <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">Owner</div>
+          <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">負責人</div>
           <div className="flex gap-2">
             <select
               value={ownerDraft}
               onChange={(event) => setOwnerDraft(event.target.value)}
               className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40"
             >
-              <option value="">(none)</option>
-              {agentOptions.map((agent) => (
+              <option value="">未指定</option>
+              {ownerOptions.map((agent) => (
                 <option key={`${item.id}-owner-${agent.id}`} value={agent.id}>
                   {agent.emoji} {agent.name}
                 </option>
@@ -363,12 +490,12 @@ function AttentionRow({
               onClick={() => onAttentionAction(item.id, 'set_owner', { owner: ownerDraft || null })}
               className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {actionId === `${item.id}:set_owner` ? 'Saving...' : 'Set'}
+              {actionId === `${item.id}:set_owner` ? '儲存中...' : '儲存'}
             </button>
           </div>
         </label>
         <label className="text-xs text-gray-400">
-          <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">Next Review</div>
+          <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">下次檢視</div>
           <div className="flex gap-2">
             <input
               type="datetime-local"
@@ -382,17 +509,17 @@ function AttentionRow({
               onClick={() => onAttentionAction(item.id, 'set_next_review_at', { nextReviewAt: nextReviewDraft || null })}
               className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {actionId === `${item.id}:set_next_review_at` ? 'Saving...' : 'Set'}
+              {actionId === `${item.id}:set_next_review_at` ? '儲存中...' : '儲存'}
             </button>
           </div>
         </label>
       </div>
       {isTaskDraftOpen && taskDraft && (
         <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Confirm Sheet</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">交辦確認</div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-xs text-gray-400">
-              <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">Title</div>
+              <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">標題</div>
               <input
                 value={taskDraft.title}
                 onChange={(event) => onTaskDraftChange('title', event.target.value)}
@@ -400,13 +527,13 @@ function AttentionRow({
               />
             </label>
             <label className="text-xs text-gray-400">
-              <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">Target Agent</div>
+              <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">交給誰</div>
               <select
                 value={taskDraft.targetAgent}
                 onChange={(event) => onTaskDraftChange('targetAgent', event.target.value)}
                 className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40"
               >
-                {agentOptions.map((agent) => (
+                {taskTargetOptions.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.emoji} {agent.name}
                   </option>
@@ -415,7 +542,7 @@ function AttentionRow({
             </label>
           </div>
           <label className="mt-3 block text-xs text-gray-400">
-            <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">Detail</div>
+            <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">內容</div>
             <textarea
               rows={5}
               value={taskDraft.detail}
@@ -424,19 +551,19 @@ function AttentionRow({
             />
           </label>
           <label className="mt-3 block text-xs text-gray-400">
-            <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">Note</div>
+            <div className="mb-2 uppercase tracking-[0.18em] text-slate-400">備註</div>
             <input
               value={taskDraft.note}
               onChange={(event) => onTaskDraftChange('note', event.target.value)}
-              placeholder="Optional note"
+              placeholder="有需要再補充"
               className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40"
             />
           </label>
           <div className="mt-3 grid gap-3 md:grid-cols-4 text-[11px] text-gray-400">
-            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">attention: {item.attentionType}</div>
-            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">priority: {item.priority || 0}</div>
-            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">needsDecision: {item.needsDecision ? 'yes' : 'no'}</div>
-            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">estimatedValue: {item.commercialValue || 0}</div>
+            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">類型: {TYPE_META[item.attentionType]?.label || humanizeToken(item.attentionType)}</div>
+            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">優先度: {item.priority || 0}</div>
+            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">需要拍板: {item.needsDecision ? '是' : '否'}</div>
+            <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">估計價值: {item.commercialValue || 0}</div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -445,7 +572,7 @@ function AttentionRow({
               onClick={() => onTaskDraftSubmit(item.id)}
               className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {actionId === `${item.id}:create_task` ? 'Creating...' : 'Confirm Create Task'}
+              {actionId === `${item.id}:create_task` ? '交辦中...' : '確認交辦'}
             </button>
             <button
               type="button"
@@ -453,7 +580,7 @@ function AttentionRow({
               onClick={onTaskDraftCancel}
               className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancel
+              取消
             </button>
           </div>
         </div>
@@ -464,10 +591,10 @@ function AttentionRow({
 
 function AgentCard({ agent }) {
   const layerLabel = agent.activityState === 'inactive'
-    ? 'Inactive'
+    ? '未啟用'
     : agent.layer === 'focus'
-      ? 'Focus'
-      : 'Active'
+      ? '優先關注'
+      : '運作中'
   return (
     <div className="rounded-xl border border-white/6 bg-black/20 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -502,9 +629,6 @@ function AgentCard({ agent }) {
       <div className="mt-3 text-[11px] text-gray-500">
         最後活動: {formatTime(agent.lastActive)}
       </div>
-      {agent.bindings?.length > 0 && (
-        <div className="mt-2 text-[11px] text-gray-500">{agent.bindings[0]}</div>
-      )}
     </div>
   )
 }
@@ -539,11 +663,11 @@ function GrowthSignalRow({ signal }) {
         <span className="text-lg">{signal.agentEmoji}</span>
         <span className="font-display text-white">{signal.agentName}</span>
         <span className="rounded-full border border-emerald-400/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-          {signal.label}
+          {humanizeToken(signal.label)}
         </span>
       </div>
       <div className="mt-3 text-sm leading-6 text-white">{signal.summary}</div>
-      <div className="mt-2 text-[11px] text-emerald-100/80">成長分數 {signal.score} / 更新 {formatTime(signal.runAt)}</div>
+      <div className="mt-2 text-[11px] text-emerald-100/80">成長分數: {signal.score} / 更新: {formatTime(signal.runAt)}</div>
     </div>
   )
 }
@@ -555,26 +679,26 @@ function CandidatePatchRow({ item }) {
       ? 'text-rose-300 border-rose-400/30'
       : 'text-amber-200 border-amber-400/30'
   const applyLabel = item.applyStatus === 'applied'
-    ? 'applied'
+    ? APPLY_STATUS_LABEL.applied
     : item.applyStatus === 'rolled_back'
-      ? 'rolled back'
-      : 'not applied'
+      ? APPLY_STATUS_LABEL.rolled_back
+      : APPLY_STATUS_LABEL.not_applied
   return (
     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm text-white">
           {item.agentName ? `${item.agentName} / ` : ''}
-          {item.category}
+          {humanizeToken(item.category)}
         </div>
         <div className="flex items-center gap-2">
           <div className="text-[11px] text-amber-100/80">
-            {item.candidateKind || 'recurring'}
+            {formatCandidateKind(item.candidateKind)}
           </div>
           <div className="text-[11px] text-amber-200">
-            impact {item.estimatedImpact} / x{item.recurrence}
+            影響度 {item.estimatedImpact} / 重複 {item.recurrence} 次
           </div>
           <div className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${statusColor}`}>
-            {item.reviewStatus || 'pending'}
+            {formatStatusLabel(item.reviewStatus || 'pending', REVIEW_STATUS_LABEL)}
           </div>
         </div>
       </div>
@@ -582,57 +706,57 @@ function CandidatePatchRow({ item }) {
       <div className="mt-2 text-sm leading-6 text-amber-100/80">{item.proposedChange}</div>
       {item.evolutionStatusLabel && (
         <div className="mt-2 text-[11px] text-amber-200/80">
-          gate: {item.evolutionStatusLabel}
-          {item.autoApplyEligible ? ' / auto-eligible' : ''}
-          {item.autoApproveReady ? ' / auto-approve-ready' : ''}
+          目前階段: {item.evolutionStatusLabel}
+          {item.autoApplyEligible ? ' / 可直接套用' : ''}
+          {item.autoApproveReady ? ' / 可直接同意' : ''}
         </div>
       )}
       {item.canaryStatus && item.canaryStatus !== 'none' && (
         <div className="mt-2 text-[11px] text-cyan-100/80">
-          canary: {item.canaryStatus}
+          小範圍觀察: {humanizeToken(item.canaryStatus)}
           {item.rollbackReason ? ` / ${item.rollbackReason}` : ''}
         </div>
       )}
       {(item.didImproveScore !== undefined && item.didImproveScore !== null) && (
         <div className="mt-2 text-[11px] text-cyan-100/80">
-          didImproveScore: {Number(item.didImproveScore).toFixed(3)}
+          改善分數: {Number(item.didImproveScore).toFixed(3)}
         </div>
       )}
       {item.dryRunSummary && (
-        <div className="mt-2 text-[11px] text-cyan-100/80">{item.dryRunSummary}</div>
+        <div className="mt-2 text-[11px] text-cyan-100/80">試跑摘要: {item.dryRunSummary}</div>
       )}
       {item.applyPrereqs?.length > 0 && (
         <div className="mt-2 text-[11px] text-rose-200/80">
-          prereqs: {item.applyPrereqs.join(' | ')}
+          先決條件: {item.applyPrereqs.join(' | ')}
         </div>
       )}
       {item.evidenceRefs?.length > 0 && (
         <div className="mt-2 text-[11px] text-amber-100/80">
-          evidence: {item.evidenceRefs.slice(0, 3).join(' | ')}
+          依據: {item.evidenceRefs.slice(0, 3).join(' | ')}
         </div>
       )}
-      <div className="mt-2 text-[11px] text-amber-200/80">{item.target}</div>
+      <div className="mt-2 text-[11px] text-amber-200/80">影響位置: {humanizeToken(item.target)}</div>
       {item.reviewArtifactPath && (
-        <div className="mt-2 text-[11px] text-cyan-200/80">{item.reviewArtifactPath}</div>
+        <div className="mt-2 text-[11px] text-cyan-200/80">補充資料: {item.reviewArtifactPath}</div>
       )}
       {(item.reviewedAt || item.reviewNote) && (
         <div className="mt-2 text-[11px] text-amber-100/70">
-          {item.reviewedAt ? `reviewed ${formatTime(item.reviewedAt)}` : ''}
-          {item.reviewedBy ? ` / by ${item.reviewedBy}` : ''}
+          {item.reviewedAt ? `已確認 ${formatTime(item.reviewedAt)}` : ''}
+          {item.reviewedBy ? ` / ${item.reviewedBy}` : ''}
           {item.reviewNote ? ` / ${item.reviewNote}` : ''}
         </div>
       )}
       {(item.appliedAt || item.appliedBy) && (
         <div className="mt-2 text-[11px] text-emerald-200/80">
-          {item.appliedAt ? `applied ${formatTime(item.appliedAt)}` : ''}
-          {item.appliedBy ? ` / by ${item.appliedBy}` : ''}
+          {item.appliedAt ? `已套用 ${formatTime(item.appliedAt)}` : ''}
+          {item.appliedBy ? ` / ${item.appliedBy}` : ''}
         </div>
       )}
       {(item.applyStatus || item.unappliedAt || item.unappliedBy) && (
         <div className="mt-2 text-[11px] text-slate-200/70">
-          apply state: {applyLabel}
-          {item.unappliedAt ? ` / rolled back ${formatTime(item.unappliedAt)}` : ''}
-          {item.unappliedBy ? ` / by ${item.unappliedBy}` : ''}
+          目前套用狀態: {applyLabel}
+          {item.unappliedAt ? ` / 已還原 ${formatTime(item.unappliedAt)}` : ''}
+          {item.unappliedBy ? ` / ${item.unappliedBy}` : ''}
         </div>
       )}
     </div>
@@ -665,15 +789,15 @@ export default function BossInboxDashboard() {
         if (res.status === 401) {
           await refreshOfficeAccess()
           setPayload(null)
-          setOfficeAccessError('Office token required before reading Boss Inbox.')
+          setOfficeAccessError('請先完成驗證，才能查看老闆收件匣。')
           return
         }
-        throw new Error(data?.error || 'Failed to fetch boss inbox')
+        throw new Error(data?.error || '老闆收件匣載入失敗')
       }
       setPayload(data)
     } catch (error) {
       console.error('Failed to fetch boss inbox:', error)
-      setOfficeAccessError((current) => current || error.message || 'Failed to fetch boss inbox')
+      setOfficeAccessError((current) => current || error.message || '老闆收件匣載入失敗')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -685,7 +809,7 @@ export default function BossInboxDashboard() {
       const res = await fetch('/api/office/session', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(data?.error || 'Failed to read Office access state')
+        throw new Error(data?.error || '無法讀取目前的驗證狀態')
       }
       setOfficeAccess({
         configured: Boolean(data.configured),
@@ -696,7 +820,7 @@ export default function BossInboxDashboard() {
       return data
     } catch (error) {
       setOfficeAccess((current) => ({ ...current, configured: false, authenticated: true, authSource: 'disabled' }))
-      setOfficeAccessError(error.message || 'Failed to read Office access state')
+      setOfficeAccessError(error.message || '無法讀取目前的驗證狀態')
       return null
     }
   }
@@ -738,7 +862,7 @@ export default function BossInboxDashboard() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(data?.error || 'Failed to authorize Office access')
+        throw new Error(data?.error || '驗證失敗，請再試一次')
       }
       setOfficeAccess({
         configured: Boolean(data.configured),
@@ -750,7 +874,7 @@ export default function BossInboxDashboard() {
       setLoading(true)
       await load(true)
     } catch (error) {
-      setOfficeAccessError(error.message || 'Failed to authorize Office access')
+      setOfficeAccessError(error.message || '驗證失敗，請再試一次')
     } finally {
       setOfficeAccessBusy(false)
     }
@@ -763,7 +887,7 @@ export default function BossInboxDashboard() {
       const res = await fetch('/api/office/session', { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(data?.error || 'Failed to clear Office access')
+        throw new Error(data?.error || '無法清除授權')
       }
       setOfficeAccess({
         configured: Boolean(data.configured),
@@ -774,7 +898,7 @@ export default function BossInboxDashboard() {
         setPayload(null)
       }
     } catch (error) {
-      setOfficeAccessError(error.message || 'Failed to clear Office access')
+      setOfficeAccessError(error.message || '無法清除授權')
     } finally {
       setOfficeAccessBusy(false)
     }
@@ -844,9 +968,76 @@ export default function BossInboxDashboard() {
   const digestAnomalies = latestDigest?.anomalies || []
   const digestEvolution = latestDigest?.evolution || null
   const hasStructuredDigest = Boolean(latestDigest?.headline || digestSections.length > 0 || digestAnomalies.length > 0)
-  const agentOptions = allAgents
-    .filter((agent) => agent.activityState === 'active')
-    .map((agent) => ({ id: agent.id, name: agent.name, emoji: agent.emoji }))
+  const agentOptions = useMemo(() => {
+    const registry = new Map()
+
+    const rememberAgent = (agent) => {
+      const id = String(agent?.id || '').trim()
+      if (!id) return
+      const current = registry.get(id) || {}
+      registry.set(id, {
+        id,
+        name: String(agent?.name || current.name || id).trim() || id,
+        emoji: String(agent?.emoji || current.emoji || '🤖').trim() || '🤖',
+        activityState: agent?.activityState || current.activityState || null,
+        layer: agent?.layer || current.layer || null,
+      })
+    }
+
+    allAgents.forEach(rememberAgent)
+    activeAgents.forEach(rememberAgent)
+    inactiveAgents.forEach(rememberAgent)
+
+    sortedAttentionItems.forEach((item) => {
+      rememberAgent({
+        id: item.agentId,
+        name: item.agentName,
+        emoji: item.agentEmoji,
+        activityState: item.unresolved ? 'active' : null,
+      })
+      if (item.assignedOwner) {
+        rememberAgent({
+          id: item.assignedOwner,
+          name: item.assignedOwner,
+          emoji: '🗂️',
+        })
+      }
+
+      const actionHint = attentionActionHints[item.id] || null
+      if (actionHint?.recommendedOwner) {
+        rememberAgent({
+          id: actionHint.recommendedOwner,
+          name: actionHint.recommendedOwner,
+          emoji: '🗂️',
+        })
+      }
+      if (actionHint?.suggestedTargetAgent) {
+        rememberAgent({
+          id: actionHint.suggestedTargetAgent,
+          name: actionHint.suggestedTargetAgent,
+          emoji: '🗂️',
+        })
+      }
+    })
+
+    return [...registry.values()]
+      .sort((a, b) => {
+        const aActivity = a.activityState === 'active' ? 0 : 1
+        const bActivity = b.activityState === 'active' ? 0 : 1
+        if (aActivity !== bActivity) return aActivity - bActivity
+
+        const aLayer = a.layer === 'focus' ? 0 : 1
+        const bLayer = b.layer === 'focus' ? 0 : 1
+        if (aLayer !== bLayer) return aLayer - bLayer
+
+        const aRank = agentRank[a.id] ?? Number.MAX_SAFE_INTEGER
+        const bRank = agentRank[b.id] ?? Number.MAX_SAFE_INTEGER
+        if (aRank !== bRank) return aRank - bRank
+
+        return a.name.localeCompare(b.name, 'zh-Hant')
+      })
+      .map((agent) => ({ id: agent.id, name: agent.name, emoji: agent.emoji }))
+  }, [allAgents, activeAgents, inactiveAgents, sortedAttentionItems, attentionActionHints, agentRank])
 
   const openTaskDraft = (item, actionHint = null) => {
     const hintedTarget = actionHint?.suggestedTargetAgent || null
@@ -889,13 +1080,13 @@ export default function BossInboxDashboard() {
         const data = await res.json().catch(() => ({}))
         if (res.status === 401) {
           await refreshOfficeAccess()
-          setOfficeAccessError('Office token required before reviewing candidate patches.')
+          setOfficeAccessError('請先完成驗證，才能確認這些調整建議。')
         }
-        throw new Error(data?.error || 'Failed to review candidate patch')
+        throw new Error(data?.error || '無法更新這筆調整建議')
       }
       await load(true)
     } catch (error) {
-      setCandidateError(error.message || 'Failed to review candidate patch')
+      setCandidateError(error.message || '無法更新這筆調整建議')
     } finally {
       setCandidateActionId(null)
     }
@@ -918,16 +1109,16 @@ export default function BossInboxDashboard() {
         const data = await res.json().catch(() => ({}))
         if (res.status === 401) {
           await refreshOfficeAccess()
-          setOfficeAccessError('Office token required before updating attention cards.')
+          setOfficeAccessError('請先完成驗證，才能更新這些待處理項目。')
         }
-        throw new Error(data?.error || 'Failed to update attention item')
+        throw new Error(data?.error || '無法更新這筆待處理項目')
       }
       await load(true)
       if (action === 'create_task' || action === 'resolve' || action === 'acknowledge') {
         cancelTaskDraft()
       }
     } catch (error) {
-      setAttentionError(error.message || 'Failed to update attention item')
+      setAttentionError(error.message || '無法更新這筆待處理項目')
     } finally {
       setAttentionActionId(null)
     }
@@ -936,7 +1127,7 @@ export default function BossInboxDashboard() {
   if (loading) {
     return (
       <div className="glass-card rounded-2xl p-6 text-sm text-gray-400">
-        Loading Boss Inbox...
+        老闆收件匣載入中...
       </div>
     )
   }
@@ -946,10 +1137,10 @@ export default function BossInboxDashboard() {
       <div className="glass-card rounded-2xl p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.22em] text-cyan-300">Boss Inbox</div>
-            <h2 className="mt-2 font-display text-3xl text-white">只看待處理、風險與商機</h2>
+            <div className="text-xs uppercase tracking-[0.22em] text-cyan-300">老闆收件匣</div>
+            <h2 className="mt-2 font-display text-3xl text-white">只留下你真的要看的事</h2>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-gray-400">
-              Dashboard 負責全局總覽；Discord 保留給真正要處理與回覆的時刻。
+              這裡只看待拍板、待跟進、風險與機會，其他系統細節都盡量退到後面。
             </p>
           </div>
           <button
@@ -958,15 +1149,15 @@ export default function BossInboxDashboard() {
             className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 px-4 py-2 text-sm text-cyan-300 transition hover:bg-cyan-500/10"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
+            重新整理
           </button>
         </div>
       </div>
 
       {(!officeAccess.configured || officeAccess.authenticated || payload) && (
         <div className="grid gap-4 md:grid-cols-4">
-          <CountCard label="待決策" value={payload?.unresolvedCounts?.decision || 0} color={TYPE_META.decision.color} Icon={TYPE_META.decision.icon} />
-          <CountCard label="阻塞" value={payload?.unresolvedCounts?.blocked || 0} color={TYPE_META.blocked.color} Icon={TYPE_META.blocked.icon} />
+          <CountCard label="待拍板" value={payload?.unresolvedCounts?.decision || 0} color={TYPE_META.decision.color} Icon={TYPE_META.decision.icon} />
+          <CountCard label="卡住" value={payload?.unresolvedCounts?.blocked || 0} color={TYPE_META.blocked.color} Icon={TYPE_META.blocked.icon} />
           <CountCard label="風險" value={payload?.unresolvedCounts?.risk || 0} color={TYPE_META.risk.color} Icon={TYPE_META.risk.icon} />
           <CountCard label="商機" value={payload?.unresolvedCounts?.opportunity || 0} color={TYPE_META.opportunity.color} Icon={TYPE_META.opportunity.icon} />
         </div>
@@ -984,15 +1175,15 @@ export default function BossInboxDashboard() {
 
       {officeAccess.configured && !officeAccess.authenticated && !payload && (
         <div className="glass-card rounded-2xl p-6 text-sm leading-7 text-gray-300">
-          先完成 Office access 驗證，Boss Inbox 的 attention、digest 與 candidate patches 才會載入。
+          先完成驗證，這裡的待處理事項、每日摘要和調整建議才會顯示。
         </div>
       )}
 
       {governanceSummary && (
         <div className="glass-card rounded-2xl p-4">
           <div className="mb-3 text-xs text-cyan-100/80">
-            Evolution: {governanceSummary.autonomyLabel || `Level ${governanceSummary.autonomyLevel || 1}`}
-            {governanceSummary.autonomyKillSwitch ? ' / kill switch on' : ''}
+            目前自動化階段: {formatAutonomyLabel(governanceSummary.autonomyLabel, governanceSummary.autonomyLevel)}
+            {governanceSummary.autonomyKillSwitch ? ' / 自動升級暫停中' : ''}
           </div>
           <div className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-12">
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
@@ -1002,10 +1193,10 @@ export default function BossInboxDashboard() {
               可處理商機 <span className="ml-2 font-display text-white">{governanceSummary.actionableOpportunityCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Auto-Approve Ready <span className="ml-2 font-display text-white">{governanceSummary.autoApproveReadyCount || 0}</span>
+              可直接同意 <span className="ml-2 font-display text-white">{governanceSummary.autoApproveReadyCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Auto-Approved 24h <span className="ml-2 font-display text-white">{governanceSummary.autoApproved24h || 0}</span>
+              24 小時內已自動同意 <span className="ml-2 font-display text-white">{governanceSummary.autoApproved24h || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
               未掛任務 <span className="ml-2 font-display text-white">{governanceSummary.openAttentionWithoutTask || 0}</span>
@@ -1017,28 +1208,28 @@ export default function BossInboxDashboard() {
               任務過久未動 <span className="ml-2 font-display text-white">{governanceSummary.openWithStaleTask || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Snoozed <span className="ml-2 font-display text-white">{governanceSummary.snoozedCount || 0}</span>
+              暫緩中 <span className="ml-2 font-display text-white">{governanceSummary.snoozedCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              等待 Apply <span className="ml-2 font-display text-white">{governanceSummary.approvedNotAppliedCount || 0}</span>
+              等待套用 <span className="ml-2 font-display text-white">{governanceSummary.approvedNotAppliedCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Need Dry-run <span className="ml-2 font-display text-white">{governanceSummary.candidateNeedDryRun || 0}</span>
+              待試跑 <span className="ml-2 font-display text-white">{governanceSummary.candidateNeedDryRun || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Auto Eligible <span className="ml-2 font-display text-white">{governanceSummary.candidateAutoEligible || 0}</span>
+              可自動套用 <span className="ml-2 font-display text-white">{governanceSummary.candidateAutoEligible || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Canary Running <span className="ml-2 font-display text-white">{governanceSummary.canaryOpenCount || 0}</span>
+              小範圍觀察中 <span className="ml-2 font-display text-white">{governanceSummary.canaryOpenCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Auto Apply 7d <span className="ml-2 font-display text-white">{Math.round(Number(governanceSummary.autoApplySuccessRate7d || 0) * 100)}%</span>
+              近 7 天自動套用成功率 <span className="ml-2 font-display text-white">{Math.round(Number(governanceSummary.autoApplySuccessRate7d || 0) * 100)}%</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Open Critical <span className="ml-2 font-display text-white">{governanceSummary.openCriticalAttentionCount || 0}</span>
+              高優先待處理 <span className="ml-2 font-display text-white">{governanceSummary.openCriticalAttentionCount || 0}</span>
             </div>
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              Digest Delivery <span className="ml-2 font-display text-white">{governanceSummary.digestDeliveryStatus || 'pending'}</span>
+              摘要送達 <span className="ml-2 font-display text-white">{formatDeliveryStatus(governanceSummary.digestDeliveryStatus)}</span>
             </div>
           </div>
           {autonomyUpgradeAdvice?.prompt && (
@@ -1062,10 +1253,10 @@ export default function BossInboxDashboard() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">Layer 1</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">重點區</div>
               <div className="mt-2 font-display text-xl text-white">待處理優先</div>
             </div>
-            <div className="text-xs text-gray-500">{focusItems.length} items</div>
+            <div className="text-xs text-gray-500">{focusItems.length} 項</div>
           </div>
           <div className="mt-5 space-y-3">
             {attentionError && (
@@ -1097,7 +1288,7 @@ export default function BossInboxDashboard() {
           </div>
           {digestItems.length > 0 && (
             <div className="mt-6">
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Digest Only</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">僅需知道</div>
               <div className="mt-3 space-y-2">
                 {digestItems.map((item) => (
                   <div key={item.id} className="rounded-lg border border-white/6 bg-white/3 px-4 py-3 text-sm text-gray-400">
@@ -1118,17 +1309,17 @@ export default function BossInboxDashboard() {
           transition={{ delay: 0.05 }}
           className="glass-card rounded-2xl p-6"
         >
-          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">Daily Digest</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">每日摘要</div>
           <div className="mt-2 font-display text-xl text-white">老闆晚間摘要</div>
           <div className="mt-3 text-xs text-gray-500">
             生成時間: {formatTime(latestDigest?.generatedAt)}
-            {latestDigest?.deliveryChannel ? ` / channel: ${latestDigest.deliveryChannel}` : ''}
-            {latestDigest?.deliveryStatus ? ` / delivery: ${latestDigest.deliveryStatus}` : ''}
+            {latestDigest?.deliveryChannel ? ` / 送達方式: ${humanizeToken(latestDigest.deliveryChannel)}` : ''}
+            {latestDigest?.deliveryStatus ? ` / 送達狀態: ${formatDeliveryStatus(latestDigest.deliveryStatus)}` : ''}
           </div>
           {hasStructuredDigest ? (
             <div className="mt-4 space-y-4">
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm leading-7 text-emerald-200">
-                {latestDigest?.headline || 'No digest generated yet.'}
+                {latestDigest?.headline || '今天還沒有新的摘要。'}
               </div>
 
               {latestDigest?.quietDay && !latestDigest?.tomorrowPreview && digestSections.length === 0 && (
@@ -1145,13 +1336,13 @@ export default function BossInboxDashboard() {
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
                   <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">今日進化</div>
                   <div className="mt-3 space-y-2 text-sm leading-6 text-cyan-100">
-                    <div>升級步驟：{digestEvolution.autonomyLabel || `Level ${digestEvolution.autonomyLevel || 1}`}{digestEvolution.autonomyKillSwitch ? ' / kill switch' : ''}</div>
+                    <div>目前階段：{formatAutonomyLabel(digestEvolution.autonomyLabel, digestEvolution.autonomyLevel)}{digestEvolution.autonomyKillSwitch ? ' / 自動升級暫停中' : ''}</div>
                     <div>待審改進：{digestEvolution.candidatePatchCount || 0} 件</div>
                     <div>未解卡片：{digestEvolution.openAttentionCount || 0} 張</div>
                     <div>已掛任務：{digestEvolution.linkedTaskCount || 0} 張</div>
                     <div>已升格訊號：{digestEvolution.escalatedSignalsCount || 0} 張</div>
-                    <div>待 apply：{digestEvolution.approvedNotAppliedCount || 0} 件</div>
-                    <div>24h 自動核准：{digestEvolution.autoApproved24h || 0} 件 / Canary：{digestEvolution.canaryOpenCount || 0} 件</div>
+                    <div>待套用：{digestEvolution.approvedNotAppliedCount || 0} 件</div>
+                    <div>24 小時內已自動同意：{digestEvolution.autoApproved24h || 0} 件 / 小範圍觀察：{digestEvolution.canaryOpenCount || 0} 件</div>
                     {digestEvolution.autonomyUpgradeAdvice?.prompt && (
                       <div>升級建議：{digestEvolution.autonomyUpgradeAdvice.prompt}</div>
                     )}
@@ -1193,7 +1384,7 @@ export default function BossInboxDashboard() {
             </div>
           ) : (
             <pre className="mt-4 max-h-[560px] overflow-auto whitespace-pre-wrap rounded-xl border border-white/6 bg-black/20 p-4 text-sm leading-7 text-gray-300">
-              {latestDigest?.content || 'No digest generated yet.'}
+              {latestDigest?.content || '今天還沒有新的摘要。'}
             </pre>
           )}
         </motion.section>
@@ -1206,7 +1397,7 @@ export default function BossInboxDashboard() {
           transition={{ delay: 0.08 }}
           className="glass-card rounded-2xl p-6"
         >
-          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">Growth Signals</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">成長機會</div>
           <div className="mt-2 font-display text-xl text-white">今天最值得追的成長訊號</div>
           <div className="mt-5 space-y-3">
             {growthSignals.length === 0 && (
@@ -1226,10 +1417,10 @@ export default function BossInboxDashboard() {
           transition={{ delay: 0.12 }}
           className="glass-card rounded-2xl p-6"
         >
-          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">Candidate Patches</div>
-          <div className="mt-2 font-display text-xl text-white">待審核改進</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">系統調整建議</div>
+          <div className="mt-2 font-display text-xl text-white">待確認的改善項目</div>
           <div className="mt-3 text-xs text-gray-500">
-            pending {pendingCandidatePatches.length} / approved {approvedCandidatePatches.length} / rejected {rejectedCandidatePatches.length}
+            待確認 {pendingCandidatePatches.length} / 已同意 {approvedCandidatePatches.length} / 已退回 {rejectedCandidatePatches.length}
           </div>
           {candidateError && (
             <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-sm text-rose-200">
@@ -1239,7 +1430,7 @@ export default function BossInboxDashboard() {
           <div className="mt-5 space-y-3">
             {pendingCandidatePatches.length === 0 && (
               <div className="rounded-xl border border-white/6 bg-black/20 p-4 text-sm text-gray-400">
-                目前沒有新的 prompt / heartbeat / knowledge 候選改進。
+                目前沒有新的調整建議。
               </div>
             )}
             {pendingCandidatePatches.slice(0, 6).map((item) => (
@@ -1252,7 +1443,7 @@ export default function BossInboxDashboard() {
                     onClick={() => mutateCandidate(item.id, 'approve')}
                     className="rounded-lg border border-emerald-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {candidateActionId === `${item.id}:approve` ? 'Approving...' : 'Approve'}
+                    {candidateActionId === `${item.id}:approve` ? '處理中...' : '同意'}
                   </button>
                   <button
                     type="button"
@@ -1260,7 +1451,7 @@ export default function BossInboxDashboard() {
                     onClick={() => mutateCandidate(item.id, 'reject')}
                     className="rounded-lg border border-rose-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {candidateActionId === `${item.id}:reject` ? 'Rejecting...' : 'Reject'}
+                    {candidateActionId === `${item.id}:reject` ? '處理中...' : '退回'}
                   </button>
                 </div>
               </div>
@@ -1270,7 +1461,7 @@ export default function BossInboxDashboard() {
             <div className="mt-6 space-y-3 border-t border-white/6 pt-6">
               {approvedNotAppliedCandidatePatches.length > 0 && (
                 <div className="space-y-3">
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Approved / Not Applied</div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">已同意 / 尚未套用</div>
                   {approvedNotAppliedCandidatePatches.slice(0, 6).map((item) => (
                     <div key={item.id} className="space-y-3">
                       <CandidatePatchRow item={item} />
@@ -1281,7 +1472,7 @@ export default function BossInboxDashboard() {
                           onClick={() => mutateCandidate(item.id, 'apply')}
                           className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {candidateActionId === `${item.id}:apply` ? 'Applying...' : 'Apply'}
+                          {candidateActionId === `${item.id}:apply` ? '套用中...' : '套用'}
                         </button>
                         <button
                           type="button"
@@ -1289,7 +1480,7 @@ export default function BossInboxDashboard() {
                           onClick={() => mutateCandidate(item.id, 'reset')}
                           className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {candidateActionId === `${item.id}:reset` ? 'Resetting...' : 'Reset'}
+                          {candidateActionId === `${item.id}:reset` ? '更新中...' : '重新檢視'}
                         </button>
                       </div>
                     </div>
@@ -1298,7 +1489,7 @@ export default function BossInboxDashboard() {
               )}
               {appliedOrRolledBackCandidatePatches.length > 0 && (
                 <div className="space-y-3">
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Applied / Rolled Back</div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">已套用 / 已還原</div>
                   {appliedOrRolledBackCandidatePatches.slice(0, 6).map((item) => (
                     <div key={item.id} className="space-y-3">
                       <CandidatePatchRow item={item} />
@@ -1310,7 +1501,7 @@ export default function BossInboxDashboard() {
                             onClick={() => mutateCandidate(item.id, 'unapply')}
                             className="rounded-lg border border-slate-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-200 transition hover:bg-slate-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {candidateActionId === `${item.id}:unapply` ? 'Rolling Back...' : 'Rollback'}
+                            {candidateActionId === `${item.id}:unapply` ? '還原中...' : '還原'}
                           </button>
                         )}
                         <button
@@ -1319,7 +1510,7 @@ export default function BossInboxDashboard() {
                           onClick={() => mutateCandidate(item.id, 'reset')}
                           className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {candidateActionId === `${item.id}:reset` ? 'Resetting...' : 'Reset'}
+                          {candidateActionId === `${item.id}:reset` ? '更新中...' : '重新檢視'}
                         </button>
                       </div>
                     </div>
@@ -1328,7 +1519,7 @@ export default function BossInboxDashboard() {
               )}
               {rejectedCandidatePatches.length > 0 && (
                 <div className="space-y-3">
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Rejected</div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">已退回</div>
                   {rejectedCandidatePatches.slice(0, 6).map((item) => (
                     <div key={item.id} className="space-y-3">
                       <CandidatePatchRow item={item} />
@@ -1339,7 +1530,7 @@ export default function BossInboxDashboard() {
                           onClick={() => mutateCandidate(item.id, 'reset')}
                           className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {candidateActionId === `${item.id}:reset` ? 'Resetting...' : 'Reset'}
+                          {candidateActionId === `${item.id}:reset` ? '更新中...' : '重新檢視'}
                         </button>
                       </div>
                     </div>
@@ -1359,17 +1550,17 @@ export default function BossInboxDashboard() {
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">Layer 2</div>
-          <div className="mt-2 font-display text-xl text-white">Active Fleet</div>
+            <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">協作區</div>
+            <div className="mt-2 font-display text-xl text-white">目前正在跟進的成員</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAllFish((value) => !value)}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:border-cyan-400/30 hover:text-white"
+          >
+            {showAllFish ? '只看重點' : `展開全部（${orderedActiveAgents.length}）`}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAllFish((value) => !value)}
-          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:border-cyan-400/30 hover:text-white"
-        >
-            {showAllFish ? 'Collapse' : `Expand Active (${orderedActiveAgents.length})`}
-        </button>
-      </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {(showAllFish ? orderedActiveAgents : focusAgents).map((agent) => (
@@ -1381,15 +1572,15 @@ export default function BossInboxDashboard() {
           <div className="mt-6 rounded-2xl border border-white/6 bg-black/20 p-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inactive Roster</div>
-                <div className="mt-2 text-sm text-gray-400">這些 workspace 目前不在 active Discord 回報閉環內。</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">暫停中的成員</div>
+                <div className="mt-2 text-sm text-gray-400">這些成員目前沒有在主動回報或跟進工作。</div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowInactiveFish((value) => !value)}
                 className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:border-cyan-400/30 hover:text-white"
               >
-                {showInactiveFish ? 'Hide Inactive' : `Show Inactive (${inactiveAgents.length})`}
+                {showInactiveFish ? '收起' : `查看（${inactiveAgents.length}）`}
               </button>
             </div>
             {showInactiveFish && (
@@ -1403,32 +1594,32 @@ export default function BossInboxDashboard() {
         )}
 
         <div className="mt-6 rounded-2xl border border-white/6 bg-black/20 p-4">
-          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Evolution Status</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">近期調整狀態</div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {agentEvolutionStatus
               .filter((entry) => entry.activityState === 'active' || showInactiveFish)
               .slice(0, showAllFish ? agentEvolutionStatus.length : 9)
               .map((entry) => (
-              <div key={entry.agentId} className="rounded-xl border border-white/6 bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-white">
-                    {entry.agentEmoji} {entry.agentName}
+                <div key={entry.agentId} className="rounded-xl border border-white/6 bg-white/[0.03] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm text-white">
+                      {entry.agentEmoji} {entry.agentName}
+                    </div>
+                    <div className={`text-[11px] ${entry.stale ? 'text-amber-300' : 'text-emerald-300'}`}>
+                      {entry.activityState === 'inactive' ? '未啟用' : (entry.stale ? '久未更新' : '正常')}
+                    </div>
                   </div>
-                  <div className={`text-[11px] ${entry.stale ? 'text-amber-300' : 'text-emerald-300'}`}>
-                    {entry.activityState === 'inactive' ? 'INACTIVE' : (entry.stale ? 'STALE' : 'ACTIVE')}
+                  <div className="mt-3 text-sm leading-6 text-gray-300">
+                    最近學到：{entry.lastLearned || '無'}
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-gray-400">
+                    下一輪要試：{entry.nextTest || '無'}
+                  </div>
+                  <div className="mt-3 text-[11px] text-gray-500">
+                    改善建議 {entry.candidateCount || 0} / 需要回頭檢查 {entry.qualityRegressionCount || 0}
                   </div>
                 </div>
-                <div className="mt-3 text-sm leading-6 text-gray-300">
-                  最近學到：{entry.lastLearned || '無'}
-                </div>
-                <div className="mt-2 text-sm leading-6 text-gray-400">
-                  下一輪要試：{entry.nextTest || '無'}
-                </div>
-                <div className="mt-3 text-[11px] text-gray-500">
-                  候選改進 {entry.candidateCount || 0} / 品質回歸 {entry.qualityRegressionCount || 0}
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       </motion.section>

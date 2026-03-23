@@ -8,15 +8,15 @@ import BossInboxDashboard from './BossInboxDashboard'
 const supportLinks = [
   {
     href: '/ops',
-    title: 'Ops Console',
-    description: '客服、代操、營運流程與商家協作都留在這裡。',
+    title: '營運總覽',
+    description: '客服、代操、營運流程與商家協作都整理在這裡。',
     icon: ShieldCheck,
     accent: '#39ff14',
   },
   {
     href: '/browser',
-    title: 'Browser Runtime',
-    description: 'Chrome / MCP / CLI 的連線狀態與除錯工具移到獨立頁面。',
+    title: '瀏覽器工具',
+    description: '常用的連線檢查和操作指令都收在這裡，需要時再進去就好。',
     icon: TerminalSquare,
     accent: '#9d4edd',
   },
@@ -35,15 +35,15 @@ export default function LegacyOfficeDashboard() {
             <div className="max-w-3xl">
               <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
                 <Inbox className="h-3.5 w-3.5" />
-                BW Office
+                老闆入口
               </div>
               <h1 className="mt-4 font-display text-3xl leading-tight text-white md:text-4xl">
-                `/office` 現在只留給
-                <span className="block text-cyan-300">Boss Inbox 主控。</span>
+                這裡現在只留下
+                <span className="block text-cyan-300">老闆真的要看的事。</span>
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-300 md:text-base">
-                舊的 Legacy Office 即時互動依賴 gateway 連到真實 OpenClaw runtime。部署站目前沒有這條 runtime，
-                所以我們把 `/office` 收斂成決策與治理入口，避免主畫面再被降級面板稀釋。
+                我們把這裡整理成比較像辦公入口的樣子，只留下待拍板、重要提醒、每日摘要和交辦，
+                其他偏系統操作的內容都移到別的頁面，畫面會乾淨很多。
               </p>
             </div>
 

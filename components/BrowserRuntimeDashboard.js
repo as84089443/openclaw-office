@@ -14,7 +14,7 @@ function StatusPill({ ready }) {
       }}
     >
       {ready ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-      {ready ? 'Stack Ready' : 'Needs Attention'}
+      {ready ? '可直接使用' : '需要留意'}
     </div>
   )
 }
@@ -51,7 +51,7 @@ function CopyButton({ value }) {
       className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-200 transition hover:border-cyan-400/40 hover:text-white"
     >
       <Clipboard className="h-3.5 w-3.5" />
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? '已複製' : '複製'}
     </button>
   )
 }
@@ -69,7 +69,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       const response = await fetch('/api/office/session', { cache: 'no-store' })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(data?.error || 'Failed to read Office access state')
+        throw new Error(data?.error || '無法讀取目前的辦公室權限')
       }
       setOfficeAccess({
         configured: Boolean(data.configured),
@@ -79,7 +79,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       return data
     } catch (loadError) {
       setOfficeAccess({ configured: false, authenticated: true, authSource: 'disabled' })
-      setError(loadError.message || 'Failed to read Office access state')
+      setError(loadError.message || '無法讀取目前的辦公室權限')
       return null
     }
   }, [])
@@ -93,16 +93,16 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
         if (response.status === 401) {
           await refreshOfficeAccess()
           setSnapshot(null)
-          setError('Office token required before reading Browser Runtime.')
+          setError('請先完成辦公室驗證，才能查看這頁工具。')
           return
         }
-        throw new Error(data?.error || 'Browser stack API unavailable')
+        throw new Error(data?.error || '目前暫時讀不到瀏覽器工具資訊')
       }
       setSnapshot(data)
       setLoading(false)
     } catch (loadError) {
       console.error('Failed to load browser stack:', loadError)
-      setError(loadError.message || 'Browser stack API unavailable')
+      setError(loadError.message || '目前暫時讀不到瀏覽器工具資訊')
       setLoading(false)
     }
   }, [refreshOfficeAccess])
@@ -143,7 +143,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(data?.error || 'Failed to authorize Office access')
+        throw new Error(data?.error || '驗證失敗，請再試一次')
       }
       setOfficeAccess({
         configured: Boolean(data.configured),
@@ -154,7 +154,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       setLoading(true)
       await fetchSnapshot()
     } catch (submitError) {
-      setError(submitError.message || 'Failed to authorize Office access')
+      setError(submitError.message || '驗證失敗，請再試一次')
     } finally {
       setAccessBusy(false)
     }
@@ -167,7 +167,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       const response = await fetch('/api/office/session', { method: 'DELETE' })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(data?.error || 'Failed to clear Office access')
+        throw new Error(data?.error || '無法清除這次驗證')
       }
       setOfficeAccess({
         configured: Boolean(data.configured),
@@ -176,7 +176,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
       })
       setSnapshot(null)
     } catch (clearError) {
-      setError(clearError.message || 'Failed to clear Office access')
+      setError(clearError.message || '無法清除這次驗證')
     } finally {
       setAccessBusy(false)
     }
@@ -184,27 +184,27 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
 
   const metrics = useMemo(() => ([
     {
-      label: 'Extension',
-      value: snapshot?.opencliStatus?.extensionConnected ? 'Connected' : 'Offline',
-      hint: 'opencli daemon 和 Chrome bridge 是否已經握手。',
+      label: '連線外掛',
+      value: snapshot?.opencliStatus?.extensionConnected ? '已連上' : '未連上',
+      hint: '現在瀏覽器這端有沒有順利接上。',
       accent: snapshot?.opencliStatus?.extensionConnected ? '#39ff14' : '#ff6b35',
     },
     {
-      label: 'CDP Targets',
+      label: '可附著頁面',
       value: snapshot?.cdpTargetCount ?? 0,
-      hint: '目前可附著的 Chrome DevTools targets 總數。',
+      hint: '目前可以接上檢查的頁面數量。',
       accent: '#00f5ff',
     },
     {
-      label: 'Page Tabs',
+      label: '可互動分頁',
       value: snapshot?.pageTargetCount ?? 0,
-      hint: '目前可直接互動的 page 類型 targets。',
+      hint: '目前可以直接操作的頁面分頁數量。',
       accent: '#9d4edd',
     },
     {
-      label: 'Pending',
+      label: '待處理訊息',
       value: snapshot?.opencliStatus?.pending ?? 0,
-      hint: 'opencli bridge 尚未處理完的 pending 訊息數。',
+      hint: '還沒處理完的瀏覽器橋接訊息數量。',
       accent: '#ffb703',
     },
   ]), [snapshot])
@@ -216,14 +216,15 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-4xl">
               <div className="mb-4 inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
-                Browser Runtime
+                瀏覽器工具
               </div>
               <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
-                真實 Chrome、MCP、browser CLI
-                <span className="block text-cyan-300">統一看板。</span>
+                把常用的瀏覽器連線檢查與指令
+                <span className="block text-cyan-300">放在同一頁。</span>
               </h1>
               <p className="mt-5 max-w-3xl text-sm leading-8 text-gray-300 md:text-base">
-                這頁不是文件替代品，而是日常操作入口。先看 stack 是否健康，再複製正確命令，不用回頭翻 skill 或猜哪條 wrapper 才是最新真相。
+                這頁是日常操作入口。先看連線有沒有正常，再複製需要的指令，
+                不用回頭翻文件，也不用猜現在該開哪一條工具。
               </p>
             </div>
             <div className="space-y-3">
@@ -234,17 +235,17 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:border-cyan-400/40 hover:text-white"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
+                重新整理
               </button>
             </div>
           </div>
           {error ? (
             <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
-              Browser stack 目前不可用：{error}
+              目前暫時讀不到瀏覽器工具資訊：{error}
             </div>
           ) : null}
           <div className="mt-6 text-xs text-gray-500">
-            Last updated: {snapshot?.updatedAt ? new Date(snapshot.updatedAt).toLocaleString('zh-TW') : 'loading'}
+            最近更新: {snapshot?.updatedAt ? new Date(snapshot.updatedAt).toLocaleString('zh-TW') : '讀取中'}
           </div>
         </section>
 
@@ -252,15 +253,15 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
           <section className="glass-card rounded-[28px] p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Browser Access</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">工具存取</div>
                 <div className="mt-2 text-sm leading-7 text-gray-300">
                   {officeAccess.authenticated
-                    ? '這個瀏覽器已取得 Browser Runtime 存取權限。'
-                    : 'Browser Runtime 現在也走 x-office 保護，先驗證一次再看 Chrome / MCP 真實狀態。'}
+                    ? '這個瀏覽器已取得工具頁的存取權限。'
+                    : '這頁也有保護機制，先驗證一次再查看目前的連線與工具狀態。'}
                 </div>
                 <div className="mt-2 text-[11px] text-gray-500">
-                  header: <code>x-office-token</code>
-                  {officeAccess.authSource ? ` / current: ${officeAccess.authSource}` : ''}
+                  驗證欄位: <code>x-office-token</code>
+                  {officeAccess.authSource ? ` / 目前: ${officeAccess.authSource}` : ''}
                 </div>
               </div>
               {officeAccess.authenticated ? (
@@ -270,7 +271,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                   onClick={clearOfficeAccess}
                   className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {accessBusy ? 'Signing Out...' : 'Clear Access'}
+                  {accessBusy ? '清除中...' : '清除權限'}
                 </button>
               ) : (
                 <form className="flex w-full max-w-xl flex-col gap-3 lg:w-auto lg:flex-row" onSubmit={submitOfficeAccess}>
@@ -278,7 +279,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                     type="password"
                     value={tokenDraft}
                     onChange={(event) => setTokenDraft(event.target.value)}
-                    placeholder="Paste OFFICE_ADMIN_TOKEN"
+                    placeholder="貼上 Office 驗證碼"
                     className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/40 lg:min-w-[320px]"
                   />
                   <button
@@ -286,7 +287,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                     disabled={accessBusy || !tokenDraft.trim()}
                     className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {accessBusy ? 'Authorizing...' : 'Authorize'}
+                    {accessBusy ? '驗證中...' : '確認'}
                   </button>
                 </form>
               )}
@@ -296,7 +297,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
 
         {officeAccess.configured && !officeAccess.authenticated && !snapshot ? (
           <section className="glass-card rounded-[28px] p-6 text-sm leading-7 text-gray-300">
-            先完成 Office access 驗證，這裡才會顯示真實 Chrome、CDP targets 與 browser CLI 狀態。
+            先完成辦公室權限驗證，這裡才會顯示瀏覽器連線狀態與常用指令。
           </section>
         ) : null}
 
@@ -312,7 +313,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
               <div className="glass-card rounded-[28px] p-6">
                 <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-cyan-300">
                   <Terminal className="h-4 w-4" />
-                  Command Presets
+                  常用指令
                 </div>
                 <div className="mt-5 grid gap-4">
                   {snapshot?.commandPresets?.map((preset) => (
@@ -342,7 +343,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                 <div className="glass-card rounded-[28px] p-6">
                   <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-green-300">
                     <PlugZap className="h-4 w-4" />
-                    Runtime Scripts
+                    工具腳本
                   </div>
                   <div className="mt-5 space-y-3">
                     {snapshot?.scripts?.map((script) => (
@@ -350,7 +351,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-sm font-semibold text-white">{script.id}</div>
                           <div className={`text-xs ${script.exists ? 'text-green-300' : 'text-red-300'}`}>
-                            {script.exists ? 'present' : 'missing'}
+                            {script.exists ? '可用' : '缺少'}
                           </div>
                         </div>
                         <div className="mt-2 break-all text-xs text-gray-500">{script.path}</div>
@@ -362,13 +363,13 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                 <div className="glass-card rounded-[28px] p-6">
                   <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-purple-300">
                     <ExternalLink className="h-4 w-4" />
-                    Connected Targets
+                    已連上的頁面
                   </div>
                   <div className="mt-5 space-y-3">
                     {(snapshot?.cdpTargets || []).map((target) => (
                       <div key={target.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-white">{target.title || 'Untitled target'}</div>
+                          <div className="text-sm font-semibold text-white">{target.title || '未命名頁面'}</div>
                           <div className="text-xs uppercase tracking-[0.18em] text-gray-400">{target.type}</div>
                         </div>
                         <div className="mt-2 break-all text-xs text-gray-500">{target.url}</div>
@@ -376,7 +377,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                     ))}
                     {!snapshot?.cdpTargets?.length ? (
                       <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-gray-500">
-                        目前沒有偵測到 CDP targets。先跑 `browser doctor` 或重新打開 bridge Chrome。
+                        目前還沒有偵測到可連線的頁面。先跑 `browser doctor`，或重新打開那個 Chrome 視窗。
                       </div>
                     ) : null}
                   </div>

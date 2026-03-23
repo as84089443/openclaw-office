@@ -11,6 +11,8 @@ services:
       NODE_ENV: production
       PORT: 4200
       NEXT_TELEMETRY_DISABLED: 1
+      BROWSER_STACK_STATUS_URL: http://host.docker.internal:19825/status
+      BROWSER_STACK_CDP_URL: http://host.docker.internal:19999/json/list
       OPENCLAW_HOME: /app/runtime
       OPENCLAW_DIR: /app/runtime/openclaw-state
       OPENCLAW_OFFICE_CONFIG_PATH: /app/runtime/openclaw-office.config.json
@@ -23,6 +25,8 @@ services:
       - ./runtime/openclaw-state/device.json:/app/runtime/openclaw-state/identity/device.json:ro
       - ./runtime/openclaw-state/device-auth.json:/app/runtime/openclaw-state/identity/device-auth.json:ro
       - ./public/sprites:/app/public/sprites:ro
+      - ../scripts:/Users/brian/.openclaw/scripts:ro
+      - ../../.local/bin:/Users/brian/.local/bin:ro
 
   openclaw-maintenance:
     container_name: openclaw-maintenance

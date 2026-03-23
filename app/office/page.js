@@ -1,8 +1,8 @@
 import LegacyOfficeDashboard from '../../components/LegacyOfficeDashboard'
 
 export const metadata = {
-  title: 'BW Office',
-  description: 'Boss Inbox governance surface for BW Copilot.',
+  title: '老闆收件匣 | BW Copilot',
+  description: '老闆查看待拍板、待跟進與每日重點的入口。',
 }
 
 export default function OfficePage() {

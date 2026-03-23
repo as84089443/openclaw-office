@@ -11,20 +11,20 @@ function NavBar() {
             BW Copilot
           </a>
           <a href="/merchant" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
-            Merchant
+            店家工作台
           </a>
           <a href="/ops" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
-            Ops
+            營運總覽
           </a>
           <a href="/browser" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
-            Browser
+            瀏覽器工具
           </a>
           <a href="/office" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
-            Office
+            老闆收件匣
           </a>
         </div>
         <div className="text-xs text-gray-500">
-          Boss Inbox / Ops / Browser
+          老闆收件匣 / 營運總覽 / 瀏覽器工具
         </div>
       </div>
     </nav>

@@ -4,33 +4,33 @@ import { ArrowRight, Building2, MessageCircleMore, Store, TerminalSquare } from 
 const entryPoints = [
   {
     href: '/merchant',
-    title: 'Merchant Copilot',
-    subtitle: '店家面',
-    description: '給店家直接用的低負擔介面。只看待核准卡、週摘要與少量營業更新。',
+    title: '店家工作台',
+    subtitle: '給店家看的',
+    description: '給店家直接使用的簡單入口，只看待確認事項、本週重點與少量營業提醒。',
     accent: '#00f5ff',
     icon: MessageCircleMore,
   },
   {
     href: '/ops',
-    title: 'Ops Console',
-    subtitle: '內部營運面',
-    description: '給客服、代操、營運看的主控台。看 autopilot 分流、例外、成效與渠道健康。',
+    title: '營運總覽',
+    subtitle: '內部協作',
+    description: '給客服、代操與營運團隊看的工作台，把例外狀況、追蹤進度和商家協作整理在一起。',
     accent: '#39ff14',
     icon: Store,
   },
   {
     href: '/office',
-    title: 'BW Office',
-    subtitle: 'Boss Inbox',
-    description: '給老闆與內部治理的決策入口。只留 attention、digest 與進化治理，不再混 legacy realtime 面板。',
+    title: '老闆收件匣',
+    subtitle: '拍板入口',
+    description: '給老闆看的重點入口，只留下待拍板、待跟進、每日摘要和重要提醒。',
     accent: '#ffb703',
     icon: Building2,
   },
   {
     href: '/browser',
-    title: 'Browser Runtime',
-    subtitle: 'Chrome / MCP / CLI',
-    description: '檢查 real Chrome bridge、CDP targets 與常用 browser 指令，不用回頭翻文件。',
+    title: '瀏覽器工具',
+    subtitle: '連線與指令',
+    description: '把常用的瀏覽器連線狀態和操作指令整理在一起，要檢查時一頁就夠。',
     accent: '#9d4edd',
     icon: TerminalSquare,
   },
@@ -46,12 +46,12 @@ export default function HomePage() {
               OpenClaw BW Copilot
             </div>
             <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
-              把店家面、營運面、Boss Inbox
-              <span className="block text-cyan-300">正式拆開。</span>
+              把店家、營運、老闆入口
+              <span className="block text-cyan-300">分開整理。</span>
             </h1>
             <p className="mt-5 max-w-3xl text-sm leading-8 text-gray-300 md:text-base">
-              這個版本的目標很直接：店家不需要學會使用後台，營運團隊有自己的 console，老闆只看 Boss Inbox，
-              不再把 legacy realtime debug 面板混在同一個入口。
+              這個版本的目標很簡單：店家看到的是容易上手的工作台，營運團隊有自己的協作頁，
+              老闆只看需要拍板與跟進的事，其他工具另外收好，不再全部混在同一個入口。
             </p>
           </div>
         </section>
@@ -86,18 +86,18 @@ export default function HomePage() {
           <div className="glass-card rounded-[28px] p-6">
             <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">建議使用順序</div>
             <div className="mt-4 space-y-3 text-sm leading-7 text-gray-300">
-              <p>1. 先看 `/merchant`，確認店家真正看到的操作負擔夠低。</p>
-              <p>2. 再看 `/ops`，確認 autopilot、例外與成效能被內部接住。</p>
-              <p>3. `/browser` 用來檢查 Chrome bridge 與複製正確 browser 指令。</p>
-              <p>4. `/office` 只留給 Boss Inbox 與治理操作，不再承擔 legacy realtime runtime 面板。</p>
+              <p>1. 先看 `/merchant`，確認店家真正看到的操作夠直覺、夠省力。</p>
+              <p>2. 再看 `/ops`，確認內部團隊有把例外、進度和協作接住。</p>
+              <p>3. `/office` 只留給老闆看重點，不再混進其他操作頁。</p>
+              <p>4. `/browser` 則是在要檢查連線或複製常用指令時再打開。</p>
             </div>
           </div>
 
           <div className="glass-card rounded-[28px] p-6">
-            <div className="text-sm uppercase tracking-[0.18em] text-green-300">部署建議</div>
+            <div className="text-sm uppercase tracking-[0.18em] text-green-300">上線提醒</div>
             <div className="mt-4 space-y-3 text-sm leading-7 text-gray-300">
-              <p>本地只留給 demo 與開發；真正給店家用時，請走公開 HTTPS 的 staging / production。</p>
-              <p>這個 repo 已補 `render.yaml` 與 cloud-ready 的入口拆分，下一步直接可以推 Render pilot。</p>
+              <p>本地環境適合 demo 和調整；真的要給店家或內部團隊使用時，走公開 HTTPS 入口會比較順。</p>
+              <p>現在入口已經分清楚，後續不管接測試站或正式站，維護起來都會單純很多。</p>
             </div>
           </div>
         </section>
