@@ -191,6 +191,46 @@ test('syncEvolutionArtifacts writes events, learnings, and heartbeat state per a
   assert.ok(bizdevEvent.nextTests[0].includes('最值得追'))
 })
 
+test('syncEvolutionArtifacts normalizes delivered status sync noise into ok events', () => {
+  const runAtMs = Date.now() - 10 * 60 * 1000
+  appendFileSync(join(runsDir, 'bizdev-daily.jsonl'), `${JSON.stringify({
+    jobId: 'bizdev-daily',
+    action: 'finished',
+    status: 'error',
+    delivered: true,
+    deliveryStatus: 'delivered',
+    error: '⚠️ 📝 Edit: `in ~/.openclaw/agent/status.json (142 chars)` failed',
+    runAtMs,
+    summary: [
+      '狀態',
+      '- 今天已有回覆紀錄，但原始名單仍未驗證完成。',
+      '缺什麼',
+      '- 缺已驗證 follow-up 名單，暫時不能直接排合作客戶優先序。',
+      '誰要補',
+      '- bizdev 要先清洗名單，再讓 admin 吃進可驗證來源。',
+      '補完後我下一輪會做什麼',
+      '- 我會先挑 1 位最值得追的舊客，直接寫出下一封跟進訊息。',
+      '今天學到',
+      '- delivered 後只剩狀態同步噪音時，不應把整筆 run 當真正 error。',
+    ].join('\n'),
+  })}\n`)
+
+  syncEvolutionArtifacts({ now: Date.now() })
+
+  const bizdevEvents = readFileSync(join(bizdevWorkspace, '.learnings', 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  const normalizedEvent = bizdevEvents.find((entry) => entry.id === `bizdev-daily:${runAtMs}`)
+
+  assert.ok(normalizedEvent)
+  assert.equal(normalizedEvent.status, 'ok')
+  assert.equal(normalizedEvent.format, 'short')
+  assert.equal(normalizedEvent.qualityRegression, false)
+  assert.ok(normalizedEvent.summaryExcerpt.includes('狀態'))
+  assert.ok(normalizedEvent.learned.some((entry) => entry.includes('真正 error')))
+})
+
 test('runNightlyEvolutionPromotion generates candidate patches and promoted knowledge from repeated evidence', () => {
   const result = runNightlyEvolutionPromotion({ now: Date.now() })
 

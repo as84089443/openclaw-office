@@ -215,6 +215,31 @@ test('cron failures are surfaced as blocked or risk attention items', () => {
   assert.equal(item.agentId, 'finance-company')
 })
 
+test('delivered status sync noise does not surface as a cron attention item', () => {
+  writeCronJobs([
+    {
+      id: 'nightly-sync',
+      name: 'Nightly Sync',
+      description: 'Sync accounting exports',
+      enabled: true,
+      agentId: 'finance-company',
+      state: {
+        lastStatus: 'error',
+        consecutiveErrors: 3,
+        lastDelivered: true,
+        lastDeliveryStatus: 'delivered',
+        lastError: '⚠️ 📝 Edit: `in ~/.openclaw/agent/status.json (142 chars)` failed',
+        lastRunAtMs: Date.now(),
+      },
+    },
+  ])
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'cron:nightly-sync')
+
+  assert.equal(item, undefined)
+})
+
 test('root maintenance reports surface a single maintenance attention card when issues exist', () => {
   writeMaintenanceReports({
     hygiene: {
