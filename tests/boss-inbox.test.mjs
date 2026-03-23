@@ -8,9 +8,12 @@ const tempRoot = mkdtempSync(join(tmpdir(), 'openclaw-boss-inbox-'))
 const cronDir = join(tempRoot, 'cron')
 const agentSystemLogsDir = join(tempRoot, 'workspace', 'agent-system', 'logs')
 const maintenanceReportsDir = join(tempRoot, 'artifacts', 'maintenance', 'reports')
+const officeDataDir = join(tempRoot, 'office-data')
+const officeMirrorReportsDir = join(officeDataDir, 'maintenance-reports')
 mkdirSync(cronDir, { recursive: true })
 mkdirSync(agentSystemLogsDir, { recursive: true })
 mkdirSync(maintenanceReportsDir, { recursive: true })
+mkdirSync(officeMirrorReportsDir, { recursive: true })
 
 const openclawConfig = {
   agents: {
@@ -51,7 +54,7 @@ writeFileSync(join(cronDir, 'jobs.json'), JSON.stringify({ jobs: [] }, null, 2))
 
 process.env.OPENCLAW_HOME = tempRoot
 process.env.OPENCLAW_CONFIG_PATH = join(tempRoot, 'openclaw.json')
-process.env.OPENCLAW_OFFICE_DB_PATH = join(tempRoot, 'office.db')
+process.env.OPENCLAW_OFFICE_DB_PATH = join(officeDataDir, 'office.db')
 
 const { db, createRequest, createTask, getDailyDigestByDate, upsertAttentionState } = await import('../lib/db.js')
 const { buildBossInboxPayload, ensureDailyDigest, runAttentionAction } = await import('../lib/boss-inbox.js')
@@ -97,7 +100,10 @@ function writeAuditEnv(values = {}) {
   )
 }
 
-function writeMaintenanceReports({ hygiene = null, cleanup = null } = {}) {
+function writeMaintenanceReports({ hygiene = null, cleanup = null, route = null, reportDir = null } = {}) {
+  const reportDirs = Array.isArray(reportDir)
+    ? reportDir
+    : [reportDir || maintenanceReportsDir, officeMirrorReportsDir]
   const defaultHygiene = {
     generatedAt: new Date().toISOString(),
     root: tempRoot,
@@ -107,7 +113,7 @@ function writeMaintenanceReports({ hygiene = null, cleanup = null } = {}) {
       uncoveredTopLevelDirectories: [],
       missingReadmes: [],
     },
-    reportPath: join(maintenanceReportsDir, 'latest-root-hygiene.json'),
+    reportPath: join(reportDirs[0], 'latest-root-hygiene.json'),
   }
   const defaultCleanup = {
     generatedAt: new Date().toISOString(),
@@ -119,17 +125,39 @@ function writeMaintenanceReports({ hygiene = null, cleanup = null } = {}) {
       byZone: {},
     },
     candidates: [],
-    reportPath: join(maintenanceReportsDir, 'latest-root-maintenance.json'),
+    reportPath: join(reportDirs[0], 'latest-root-maintenance.json'),
+  }
+  const defaultRoute = {
+    generatedAt: new Date().toISOString(),
+    hostname: 'copilot.bw-space.com',
+    tunnel: 'openclaw',
+    status: 'ok',
+    configPath: join(tempRoot, '.cloudflared', 'config.yml'),
+    configUpdated: 0,
+    launchdStatus: 'unchanged',
+    dockerPublicStatus: 'ok',
+    strayCloudflaredCount: 0,
+    localHealth: 'ok',
+    publicHealth: 'ok',
+    publicBossInbox: 'ok',
+    reportPath: join(reportDirs[0], 'latest-copilot-route.json'),
   }
 
-  writeFileSync(
-    join(maintenanceReportsDir, 'latest-root-hygiene.json'),
-    JSON.stringify(hygiene || defaultHygiene, null, 2),
-  )
-  writeFileSync(
-    join(maintenanceReportsDir, 'latest-root-maintenance.json'),
-    JSON.stringify(cleanup || defaultCleanup, null, 2),
-  )
+  for (const currentDir of reportDirs) {
+    mkdirSync(currentDir, { recursive: true })
+    writeFileSync(
+      join(currentDir, 'latest-root-hygiene.json'),
+      JSON.stringify(hygiene || defaultHygiene, null, 2),
+    )
+    writeFileSync(
+      join(currentDir, 'latest-root-maintenance.json'),
+      JSON.stringify(cleanup || defaultCleanup, null, 2),
+    )
+    writeFileSync(
+      join(currentDir, 'latest-copilot-route.json'),
+      JSON.stringify(route || defaultRoute, null, 2),
+    )
+  }
 }
 
 test.beforeEach(() => {
@@ -228,7 +256,9 @@ test('root maintenance reports surface a single maintenance attention card when 
   assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'issues')
   assert.equal(payload.governanceSummary?.rootHygieneIssueCount, 3)
   assert.equal(payload.governanceSummary?.rootCleanupCandidateCount, 3)
+  assert.equal(payload.governanceSummary?.copilotRouteStatus, 'ok')
   assert.ok(payload.rootMaintenance?.reportPaths?.hygiene)
+  assert.ok(payload.rootMaintenance?.reportPaths?.route)
 })
 
 test('clean root maintenance reports do not create maintenance attention cards', () => {
@@ -240,6 +270,31 @@ test('clean root maintenance reports do not create maintenance attention cards',
   assert.equal(item, undefined)
   assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'clean')
   assert.equal(payload.governanceSummary?.rootCleanupCandidateCount, 0)
+  assert.equal(payload.governanceSummary?.copilotRouteStatus, 'ok')
+})
+
+test('maintenance attention state auto-resolves once reports return clean', () => {
+  writeMaintenanceReports({
+    hygiene: {
+      generatedAt: new Date().toISOString(),
+      root: tempRoot,
+      status: 'issues',
+      issues: {
+        unexpectedRootFiles: ['loose-note.md'],
+        uncoveredTopLevelDirectories: [],
+        missingReadmes: [],
+      },
+      reportPath: join(maintenanceReportsDir, 'latest-root-hygiene.json'),
+    },
+  })
+  let payload = buildBossInboxPayload({ skipDigest: true })
+  assert.ok(payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace'))
+
+  writeMaintenanceReports()
+  payload = buildBossInboxPayload({ skipDigest: true })
+
+  assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'clean')
+  assert.equal(payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace'), undefined)
 })
 
 test('stale root maintenance reports are surfaced as a maintenance risk card', () => {
@@ -277,6 +332,65 @@ test('stale root maintenance reports are surfaced as a maintenance risk card', (
   assert.equal(item.attentionType, 'risk')
   assert.equal(item.escalationReason, 'maintenance-stale')
   assert.equal(payload.governanceSummary?.rootMaintenanceStatus, 'stale')
+})
+
+test('copilot route degradation is folded into the maintenance attention card', () => {
+  writeMaintenanceReports({
+    route: {
+      generatedAt: new Date().toISOString(),
+      hostname: 'copilot.bw-space.com',
+      tunnel: 'openclaw',
+      status: 'degraded',
+      configPath: join(tempRoot, '.cloudflared', 'config.yml'),
+      configUpdated: 0,
+      launchdStatus: 'unchanged',
+      dockerPublicStatus: 'ok',
+      strayCloudflaredCount: 1,
+      localHealth: 'ok',
+      publicHealth: 'ok',
+      publicBossInbox: 'failed',
+      reportPath: join(maintenanceReportsDir, 'latest-copilot-route.json'),
+    },
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace')
+
+  assert.ok(item)
+  assert.equal(item.attentionType, 'risk')
+  assert.equal(item.escalationReason, 'copilot-route')
+  assert.equal(item.copilotRouteStatus, 'degraded')
+  assert.equal(item.copilotRouteDegraded, true)
+  assert.ok(item.categories.includes('copilot-route'))
+  assert.equal(payload.governanceSummary?.copilotRouteStatus, 'degraded')
+  assert.equal(payload.governanceSummary?.copilotRouteDegraded, true)
+})
+
+test('maintenance reports fall back to office data mirror when root artifacts are unavailable', () => {
+  writeMaintenanceReports({
+    cleanup: {
+      generatedAt: new Date().toISOString(),
+      root: tempRoot,
+      summary: {
+        candidateCount: 2,
+        candidateBytes: 2048,
+        candidateSizeHuman: '2.0KB',
+        byZone: {
+          tmp: { count: 2, sizeBytes: 2048, sizeHuman: '2.0KB' },
+        },
+      },
+      candidates: [],
+      reportPath: join(officeMirrorReportsDir, 'latest-root-maintenance.json'),
+    },
+    reportDir: [officeMirrorReportsDir],
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === 'maintenance:root-workspace')
+
+  assert.ok(item)
+  assert.equal(item.cleanupCandidateCount, 2)
+  assert.ok(String(payload.rootMaintenance?.reportPaths?.cleanup || '').includes('office-data/maintenance-reports'))
 })
 
 test('daily digest is generated as a boss brief and stored with structured sections', () => {
