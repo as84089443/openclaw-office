@@ -39,12 +39,25 @@
 
 也就是把原本 worker 的「claim + complete next task」改成外部 pulse。
 
+注意：如果 `FNB_PULSE_BASE_URL` 指向的是經 Cloudflare 代理的公開網域，GitHub Actions runner 可能會收到 Cloudflare challenge（403 `Just a moment...`），這時 workflow 即使拿到正確 secret 也會失敗。這種情況應優先改成：
+
+- `FNB_PULSE_BASE_URL` 使用不經 Cloudflare 的 origin URL
+- 或直接在常駐主機上跑 `npm run copilot:install-worker`，由本機 launchd worker 接手 queue 輪詢
+
 ## 需要的 GitHub Secrets
 
 - `FNB_PULSE_BASE_URL`
   - 例：`https://your-service.onrender.com`
 - `FNB_INTERNAL_API_TOKEN`
   - 要和 Render web service 內的 `FNB_INTERNAL_API_TOKEN` 一致
+
+可直接在 repo 根目錄執行：
+
+```bash
+npm run ops:sync-gh-pulse-secrets
+```
+
+它會優先從 `.env.local`，其次從 `runtime/.env.production` 讀取值，並同步到 `as84089443/openclaw-office` 的 GitHub Actions secrets。
 
 ## 適合這條免費路的情境
 

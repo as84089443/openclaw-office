@@ -37,6 +37,7 @@ npm run office:open
 ```bash
 npm run demo
 npm run migrate:fnb
+npm run ops:sync-gh-pulse-secrets
 npm run superfish:live-check
 npm run superfish:go-live
 npm run superfish:webhook
@@ -52,6 +53,13 @@ npm run test:e2e
 npm run test:e2e:ui
 npm run test:e2e:report
 ```
+
+常駐服務：
+
+- `npm run copilot:install-service`：安裝 office、tunnel 與 merchant copilot worker 三個 launchd 服務
+- `npm run copilot:uninstall-service`：移除上述 launchd 服務
+- `npm run copilot:install-worker`：只安裝 merchant copilot worker launchd 服務
+- `npm run copilot:uninstall-worker`：只移除 merchant copilot worker launchd 服務
 
 ## 重要環境變數
 
@@ -112,6 +120,8 @@ npm run test:e2e:report
 - 正式上線前請完成 LINE 與 Google OAuth 外部設定。
 - 遷移執行清單：[`docs/render-migration-as84089443.md`](/Users/brian/.openclaw/openclaw-office/docs/render-migration-as84089443.md)
 - 免費版部署說明：[`docs/render-hobby-free-path.md`](/Users/brian/.openclaw/openclaw-office/docs/render-hobby-free-path.md)
+- GitHub pulse secret 同步：`npm run ops:sync-gh-pulse-secrets`（從 `.env.local` / `runtime/.env.production` 寫入 `FNB_PULSE_BASE_URL`、`FNB_INTERNAL_API_TOKEN`）
+- 若 `FNB_PULSE_BASE_URL` 指向 Cloudflare 代理的公開網域，GitHub Actions 可能被 challenge 擋下；此時優先改用 `npm run copilot:install-worker` 的本機 worker，或把 `FNB_PULSE_BASE_URL` 設成不經 Cloudflare 的 origin URL。
 
 ### 本地主機 / NAS 一鍵上線
 

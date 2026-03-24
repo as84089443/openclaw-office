@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
 import process from 'node:process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { claimNextMerchantCopilotTask, completeMerchantCopilotTask } from '../lib/fnb-service.js'
-import { readEnvMap } from './superfish-utils.mjs'
+import { envFilePath, readEnvMap } from './superfish-utils.mjs'
+
+const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const RUNTIME_ENV_PATH = join(PROJECT_ROOT, 'runtime', '.env.production')
 
 function parseArgNumber(name, fallback) {
   const prefix = `${name}=`
@@ -30,10 +35,12 @@ function sleep(ms) {
 }
 
 async function loadLocalEnv() {
-  const envMap = await readEnvMap()
-  for (const [key, value] of Object.entries(envMap)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value
+  for (const pathname of [RUNTIME_ENV_PATH, envFilePath()]) {
+    const envMap = await readEnvMap(pathname)
+    for (const [key, value] of Object.entries(envMap)) {
+      if (process.env[key] === undefined) {
+        process.env[key] = value
+      }
     }
   }
 }
