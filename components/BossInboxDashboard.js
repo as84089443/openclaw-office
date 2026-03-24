@@ -303,9 +303,13 @@ function AttentionRow({
 }) {
   const [ownerDraft, setOwnerDraft] = useState(item.assignedOwner || '')
   const [nextReviewDraft, setNextReviewDraft] = useState('')
+  const [replyDraft, setReplyDraft] = useState(item.taskResult || item.closedReason || '')
   useEffect(() => {
     setOwnerDraft(item.assignedOwner || '')
   }, [item.id, item.assignedOwner])
+  useEffect(() => {
+    setReplyDraft(item.taskResult || item.closedReason || '')
+  }, [item.id, item.taskResult, item.closedReason])
   const meta = TYPE_META[item.attentionType] || TYPE_META.digest_only
   const Icon = meta.icon
   const recommendedAction = deriveRecommendedAction(item, actionHint)
@@ -316,6 +320,8 @@ function AttentionRow({
   const urgencyReason = formatUrgencyReason(item, actionHint)
   const ownerOptions = withSelectedAgent(agentOptions, ownerDraft)
   const taskTargetOptions = withSelectedAgent(agentOptions, taskDraft?.targetAgent)
+  const savedReply = item.taskResult || item.closedReason || ''
+  const replyDirty = replyDraft.trim() !== savedReply.trim()
   const linkedTaskLabel = item.linkedTaskId
     ? `${item.linkedTaskId}${item.linkedTaskStatus ? ` / ${formatStatusLabel(item.linkedTaskStatus, WORKFLOW_STATUS_LABEL)}` : ''}`
     : null
@@ -406,6 +412,7 @@ function AttentionRow({
           <Icon className="h-4 w-4" />
         </div>
       </div>
+      <div className="mt-4 text-[11px] uppercase tracking-[0.18em] text-slate-400">快速處理</div>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
@@ -585,6 +592,41 @@ function AttentionRow({
           </div>
         </div>
       )}
+      <div className="mt-4 rounded-xl border border-white/6 bg-white/[0.03] p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">補充說明</div>
+            <div className="mt-1 text-[11px] text-gray-500">上面的快速處理保留不變，這裡可以補一句你打算怎麼做或目前進度。</div>
+          </div>
+          <div className="text-[11px] text-gray-500">
+            {item.lastFeedbackAt ? `上次回覆: ${formatTime(item.lastFeedbackAt)}` : '還沒有留下補充說明。'}
+          </div>
+        </div>
+        <textarea
+          rows={3}
+          value={replyDraft}
+          onChange={(event) => setReplyDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && replyDirty && actionId === null) {
+              event.preventDefault()
+              onAttentionAction(item.id, 'save_reply', { taskResult: replyDraft || null })
+            }
+          }}
+          placeholder="例如：先請 admin 檢查資料來源，下午 4 點前回報；若還是沒有資料就先交辦跟進。"
+          className="mt-3 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm leading-6 text-white outline-none transition focus:border-cyan-400/40"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={actionId !== null || !replyDirty}
+            onClick={() => onAttentionAction(item.id, 'save_reply', { taskResult: replyDraft || null })}
+            className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {actionId === `${item.id}:save_reply` ? '儲存中...' : '儲存補充'}
+          </button>
+          <div className="text-[11px] text-gray-500">支援 `Ctrl + Enter` / `Cmd + Enter` 快速儲存</div>
+        </div>
+      </div>
     </div>
   )
 }

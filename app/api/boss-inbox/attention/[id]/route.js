@@ -82,6 +82,7 @@ export async function POST(request, { params }) {
       detail: Object.prototype.hasOwnProperty.call(body, 'detail') ? body.detail : undefined,
       targetAgent: Object.prototype.hasOwnProperty.call(body, 'targetAgent') ? body.targetAgent : undefined,
       note: Object.prototype.hasOwnProperty.call(body, 'note') ? body.note : undefined,
+      taskResult: Object.prototype.hasOwnProperty.call(body, 'taskResult') ? body.taskResult : undefined,
       owner: Object.prototype.hasOwnProperty.call(body, 'owner') ? body.owner : undefined,
       assignedOwner: Object.prototype.hasOwnProperty.call(body, 'assignedOwner') ? body.assignedOwner : undefined,
       closeReason: Object.prototype.hasOwnProperty.call(body, 'closeReason') ? body.closeReason : undefined,
