@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowRight, FlaskConical, Inbox, ShieldCheck, TerminalSquare } from 'lucide-react'
 import BossInboxDashboard from './BossInboxDashboard'
+import WorkModeToggle from './WorkModeToggle'
 
 const supportLinks = [
   {
@@ -54,27 +55,31 @@ export default function LegacyOfficeDashboard() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:w-[420px]">
-              {supportLinks.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-2xl border bg-black/20 p-4 transition hover:-translate-y-0.5"
-                  style={{ borderColor: `${item.accent}44` }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div
-                      className="rounded-2xl p-3"
-                      style={{ background: `${item.accent}18`, color: item.accent }}
-                    >
-                      <item.icon className="h-5 w-5" />
+            <div className="w-full max-w-[460px] space-y-4">
+              <WorkModeToggle />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {supportLinks.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="rounded-2xl border bg-black/20 p-4 transition hover:-translate-y-0.5"
+                    style={{ borderColor: `${item.accent}44` }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div
+                        className="rounded-2xl p-3"
+                        style={{ background: `${item.accent}18`, color: item.accent }}
+                      >
+                        <item.icon className="h-5 w-5" />
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-gray-500" />
                     </div>
-                    <ArrowRight className="h-4 w-4 text-gray-500" />
-                  </div>
-                  <div className="mt-4 font-display text-lg text-white">{item.title}</div>
-                  <div className="mt-2 text-sm leading-6 text-gray-400">{item.description}</div>
-                </Link>
-              ))}
+                    <div className="mt-4 font-display text-lg text-white">{item.title}</div>
+                    <div className="mt-2 text-sm leading-6 text-gray-400">{item.description}</div>
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </motion.section>
