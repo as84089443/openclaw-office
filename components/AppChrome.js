@@ -19,12 +19,15 @@ function NavBar() {
           <a href="/browser" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
             瀏覽器工具
           </a>
+          <a href="/research" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
+            研究控制台
+          </a>
           <a href="/office" className="text-sm text-gray-300 transition-colors hover:text-cyan-400">
             老闆收件匣
           </a>
         </div>
         <div className="text-xs text-gray-500">
-          老闆收件匣 / 營運總覽 / 瀏覽器工具
+          老闆收件匣 / 營運總覽 / 瀏覽器工具 / 研究控制台
         </div>
       </div>
     </nav>

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Building2, MessageCircleMore, Store, TerminalSquare } from 'lucide-react'
+import { ArrowRight, Building2, FlaskConical, MessageCircleMore, Store, TerminalSquare } from 'lucide-react'
 
 const entryPoints = [
   {
@@ -34,6 +34,14 @@ const entryPoints = [
     accent: '#9d4edd',
     icon: TerminalSquare,
   },
+  {
+    href: '/research',
+    title: '研究控制台',
+    subtitle: 'AutoResearch',
+    description: '專門看 AutoResearch 在跑什麼、結果有沒有變好，以及 QA 和記憶 handoff 有沒有落地。',
+    accent: '#ff6b35',
+    icon: FlaskConical,
+  },
 ]
 
 export default function HomePage() {
@@ -56,7 +64,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {entryPoints.map((entry) => (
             <Link
               key={entry.href}

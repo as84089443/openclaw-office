@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowRight, Inbox, ShieldCheck, TerminalSquare } from 'lucide-react'
+import { ArrowRight, FlaskConical, Inbox, ShieldCheck, TerminalSquare } from 'lucide-react'
 import BossInboxDashboard from './BossInboxDashboard'
 
 const supportLinks = [
@@ -19,6 +19,13 @@ const supportLinks = [
     description: '常用的連線檢查和操作指令都收在這裡，需要時再進去就好。',
     icon: TerminalSquare,
     accent: '#9d4edd',
+  },
+  {
+    href: '/research',
+    title: '研究控制台',
+    description: '直接看 AutoResearch 的 branch、實驗進度、QA verdict 和最近 keep 的變更。',
+    icon: FlaskConical,
+    accent: '#ff6b35',
   },
 ]
 
