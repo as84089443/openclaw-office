@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowRight, FlaskConical, Inbox, ShieldCheck, TerminalSquare } from 'lucide-react'
+import { Activity, ArrowRight, FlaskConical, Inbox, ShieldCheck, TerminalSquare } from 'lucide-react'
 import BossInboxDashboard from './BossInboxDashboard'
+import SystemMonitor from './SystemMonitor'
 import WorkModeToggle from './WorkModeToggle'
 
 const supportLinks = [
@@ -81,6 +82,22 @@ export default function LegacyOfficeDashboard() {
                 ))}
               </div>
             </div>
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+          className="glass-card rounded-[32px] p-6 md:p-8"
+        >
+          <div className="flex items-center gap-2 text-sm uppercase tracking-[0.22em] text-cyan-300">
+            <Activity className="h-4 w-4" />
+            系統監控
+          </div>
+
+          <div className="mt-5">
+            <SystemMonitor />
           </div>
         </motion.section>
 
