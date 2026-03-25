@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "next dev -p 4200",
-    "build": "next build",
+    "build": "next build && node scripts/ensure-next-main-app-alias.mjs",
     "discord-reports:sync": "node ../scripts/sync-discord-report-prompts.mjs",
     "migrate:fnb": "node scripts/fnb-migrate.mjs",
     "start": "node start.js",
