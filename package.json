@@ -13,7 +13,9 @@
   },
   "scripts": {
     "dev": "next dev -p 4200",
-    "build": "next build && node scripts/ensure-next-main-app-alias.mjs",
+    "build": "zsh scripts/build-with-node24.sh",
+    "build:raw": "next build && node scripts/ensure-next-main-app-alias.mjs",
+    "rebuild:native": "zsh scripts/rebuild-native-deps-node24.sh",
     "discord-reports:sync": "node ../scripts/sync-discord-report-prompts.mjs",
     "migrate:fnb": "node scripts/fnb-migrate.mjs",
     "start": "node start.js",
@@ -66,7 +68,7 @@
   },
   "dependencies": {
     "autoprefixer": "^10.4.21",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "framer-motion": "^12.4.7",
