@@ -56,6 +56,25 @@ function CopyButton({ value }) {
   )
 }
 
+function SectionLabel({ icon: Icon, children, tone = '#00f5ff' }) {
+  return (
+    <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em]" style={{ color: tone }}>
+      <Icon className="h-4 w-4" />
+      <span>{children}</span>
+    </div>
+  )
+}
+
+function RuntimeItem({ label, value, detail, tone = '#00f5ff' }) {
+  return (
+    <div className="rounded-[22px] border border-white/8 bg-black/20 p-4">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500">{label}</div>
+      <div className="mt-2 text-base font-semibold" style={{ color: tone }}>{value}</div>
+      {detail ? <div className="mt-2 text-sm leading-6 text-gray-400">{detail}</div> : null}
+    </div>
+  )
+}
+
 export default function BrowserRuntimeDashboard({ initialSnapshot }) {
   const [officeAccess, setOfficeAccess] = useState({ configured: false, authenticated: true, authSource: 'disabled' })
   const [tokenDraft, setTokenDraft] = useState('')
@@ -209,44 +228,77 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
     },
   ]), [snapshot])
 
+  const runtimeSummary = useMemo(() => ([
+    {
+      label: '橋接狀態',
+      value: snapshot?.opencliStatus?.extensionConnected ? '擴充功能已連上' : '等待擴充功能',
+      detail: snapshot?.opencliStatus?.extensionConnected
+        ? '可以直接對現有瀏覽器分頁做附著與互動。'
+        : '先確認 Chrome 擴充功能與橋接程序都已啟動。',
+      tone: snapshot?.opencliStatus?.extensionConnected ? '#39ff14' : '#ffb703',
+    },
+    {
+      label: '可附著頁面',
+      value: `${snapshot?.cdpTargetCount ?? 0} 個`,
+      detail: '代表目前有多少分頁能被接手檢查或操作。',
+      tone: '#00f5ff',
+    },
+    {
+      label: '橋接佇列',
+      value: `${snapshot?.opencliStatus?.pending ?? 0} 筆`,
+      detail: '數字偏高時，通常代表有命令還沒消化完。',
+      tone: '#8b5cf6',
+    },
+  ]), [snapshot])
+
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-4 py-10">
+    <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 md:py-8">
       <div className="space-y-8">
-        <section className="glass-card rounded-[32px] p-8 md:p-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <section className="glass-card rounded-[34px] p-5 md:p-7">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_320px]">
             <div className="max-w-4xl">
-              <div className="mb-4 inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
+              <div className="mb-4 inline-flex rounded-full border border-cyan-500/25 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
                 瀏覽器工具
               </div>
               <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
-                把常用的瀏覽器連線檢查與指令
-                <span className="block text-cyan-300">放在同一頁。</span>
+                先確認連線，
+                <span className="block text-cyan-300">再複製指令。</span>
               </h1>
-              <p className="mt-5 max-w-3xl text-sm leading-8 text-gray-300 md:text-base">
-                這頁是日常操作入口。先看連線有沒有正常，再複製需要的指令，
-                不用回頭翻文件，也不用猜現在該開哪一條工具。
+              <p className="mt-5 max-w-3xl text-sm leading-7 text-gray-400 md:text-base">
+                這頁只留兩件事：橋接狀態現在能不能用，以及常用命令在哪裡。先判斷，再動手。
               </p>
             </div>
-            <div className="space-y-3">
-              <StatusPill ready={Boolean(snapshot?.ready)} />
-              <button
-                type="button"
-                onClick={fetchSnapshot}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:border-cyan-400/40 hover:text-white"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                重新整理
-              </button>
+
+            <div className="rounded-[28px] border border-white/10 bg-black/20 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <StatusPill ready={Boolean(snapshot?.ready)} />
+                <button
+                  type="button"
+                  onClick={fetchSnapshot}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:border-cyan-400/40 hover:text-white"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  重新整理
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {runtimeSummary.map((item) => (
+                  <RuntimeItem key={item.label} {...item} />
+                ))}
+              </div>
+
+              <div className="mt-5 text-xs text-gray-500">
+                最近更新: {snapshot?.updatedAt ? new Date(snapshot.updatedAt).toLocaleString('zh-TW') : '讀取中'}
+              </div>
             </div>
           </div>
+
           {error ? (
             <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
               目前暫時讀不到瀏覽器工具資訊：{error}
             </div>
           ) : null}
-          <div className="mt-6 text-xs text-gray-500">
-            最近更新: {snapshot?.updatedAt ? new Date(snapshot.updatedAt).toLocaleString('zh-TW') : '讀取中'}
-          </div>
         </section>
 
         {officeAccess.configured && (
@@ -254,10 +306,10 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">工具存取</div>
-                <div className="mt-2 text-sm leading-7 text-gray-300">
+                <div className="mt-2 text-sm leading-7 text-gray-400">
                   {officeAccess.authenticated
-                    ? '這個瀏覽器已取得工具頁的存取權限。'
-                    : '這頁也有保護機制，先驗證一次再查看目前的連線與工具狀態。'}
+                    ? '這個瀏覽器已驗證過，可以直接看工具狀態。'
+                    : '這頁有保護機制。先驗證一次，再看橋接與命令。'}
                 </div>
                 <div className="mt-2 text-[11px] text-gray-500">
                   驗證欄位: <code>x-office-token</code>
@@ -297,7 +349,7 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
 
         {officeAccess.configured && !officeAccess.authenticated && !snapshot ? (
           <section className="glass-card rounded-[28px] p-6 text-sm leading-7 text-gray-300">
-            先完成辦公室權限驗證，這裡才會顯示瀏覽器連線狀態與常用指令。
+            先完成驗證，這裡才會顯示瀏覽器連線狀態與常用指令。
           </section>
         ) : null}
 
@@ -309,12 +361,13 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
               ))}
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="glass-card rounded-[28px] p-6">
-                <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-cyan-300">
-                  <Terminal className="h-4 w-4" />
-                  常用指令
+            <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-6">
+                <SectionLabel icon={Terminal}>常用指令</SectionLabel>
+                <div className="mt-2 text-sm leading-7 text-gray-400">
+                  常用動作集中在這裡，照情境複製就好。
                 </div>
+
                 <div className="mt-5 grid gap-4">
                   {snapshot?.commandPresets?.map((preset) => (
                     <div
@@ -340,10 +393,10 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
               </div>
 
               <div className="space-y-4">
-                <div className="glass-card rounded-[28px] p-6">
-                  <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-green-300">
-                    <PlugZap className="h-4 w-4" />
-                    工具腳本
+                <div className="rounded-[28px] border border-white/10 bg-black/20 p-6">
+                  <SectionLabel icon={PlugZap} tone="#39ff14">工具腳本</SectionLabel>
+                  <div className="mt-2 text-sm leading-7 text-gray-400">
+                    確認本機工具還在不在，不用再猜路徑。
                   </div>
                   <div className="mt-5 space-y-3">
                     {snapshot?.scripts?.map((script) => (
@@ -360,10 +413,10 @@ export default function BrowserRuntimeDashboard({ initialSnapshot }) {
                   </div>
                 </div>
 
-                <div className="glass-card rounded-[28px] p-6">
-                  <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-purple-300">
-                    <ExternalLink className="h-4 w-4" />
-                    已連上的頁面
+                <div className="rounded-[28px] border border-white/10 bg-black/20 p-6">
+                  <SectionLabel icon={ExternalLink} tone="#c084fc">已連上的頁面</SectionLabel>
+                  <div className="mt-2 text-sm leading-7 text-gray-400">
+                    這些是現在能直接接手檢查的分頁。
                   </div>
                   <div className="mt-5 space-y-3">
                     {(snapshot?.cdpTargets || []).map((target) => (

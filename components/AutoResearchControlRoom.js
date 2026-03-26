@@ -108,6 +108,18 @@ function translateVerdict(value, fallback = '待更新') {
   const normalized = String(value).replaceAll('`', '').trim().toUpperCase()
   if (normalized === 'PASS') return '通過'
   if (normalized === 'FAIL') return '未通過'
+  if (normalized === 'NEEDS WORK') return '待補證據'
+  if (normalized === 'BLOCKED') return '卡住'
+  return value
+}
+
+function translateRevalidationVerdict(value, fallback = '待更新') {
+  if (!value) return fallback
+  const normalized = String(value).replaceAll('`', '').trim().toLowerCase()
+  if (normalized === 'stable') return '穩定重現'
+  if (normalized === 'mixed') return '有改善但波動大'
+  if (normalized === 'blocked') return '複驗失敗'
+  if (normalized === 'skipped') return '未進複驗'
   return value
 }
 
@@ -218,6 +230,11 @@ function humanizeExperimentDescription(value) {
   return localizeSentence(value)
 }
 
+function joinHumanList(items) {
+  if (!Array.isArray(items) || !items.length) return '待補'
+  return items.filter(Boolean).join('、')
+}
+
 function localizeSentence(value) {
   if (!value) return value
   const text = String(value)
@@ -314,10 +331,13 @@ function localizeArtifactContent(content) {
 
       const headingMap = {
         '## Key experiment idea kept': '## 這輪保留下來的關鍵作法',
+        '## Key idea that won': '## 這輪保留下來的關鍵作法',
         '## Outcome': '## 這輪結果',
         '## Evidence': '## 判定依據',
         '## Retest': '## 下一步複驗',
         '## Candidate Learnings': '## 候選學習',
+        '## Samples': '## 複驗樣本',
+        '## Interpretation': '## 這份複驗怎麼看',
       }
 
       if (line.startsWith('# AutoResearch MLX Summary')) {
@@ -329,6 +349,9 @@ function localizeArtifactContent(content) {
       if (line.startsWith('# AutoResearch MLX Memory Distiller Handoff')) {
         return line.replace('# AutoResearch MLX Memory Distiller Handoff', '# AutoResearch 記憶整理交接')
       }
+      if (line.startsWith('# AutoResearch MLX Revalidation')) {
+        return line.replace('# AutoResearch MLX Revalidation', '# AutoResearch 自動複驗')
+      }
       if (headingMap[line.trim()]) return headingMap[line.trim()]
 
       let localized = line
@@ -336,9 +359,14 @@ function localizeArtifactContent(content) {
       localized = replaceLabeledMarkdownLine(localized, 'Owner agent', '負責魚')
       localized = replaceLabeledMarkdownLine(localized, 'Model', '使用模型')
       localized = replaceLabeledMarkdownLine(localized, 'Strategy role', '策略角色', (value) => translateStrategyRole(value, value))
+      localized = replaceLabeledMarkdownLine(localized, 'Lane', '研究線')
+      localized = replaceLabeledMarkdownLine(localized, 'Lane goal', '研究線目標')
       localized = replaceLabeledMarkdownLine(localized, 'Branch', '研究分支')
       localized = replaceLabeledMarkdownLine(localized, 'Final kept commit', '最終保留 commit')
+      localized = replaceLabeledMarkdownLine(localized, 'Final commit', '最終保留 commit')
+      localized = replaceLabeledMarkdownLine(localized, 'Best kept commit (train config)', '最佳保留 train 設定 commit')
       localized = replaceLabeledMarkdownLine(localized, 'Best `val_bpb`', '目前最佳 val_bpb')
+      localized = replaceLabeledMarkdownLine(localized, 'Best peak memory', '最佳保留版本記憶體峰值')
       localized = replaceLabeledMarkdownLine(localized, 'Baseline `val_bpb`', '基準 val_bpb')
       localized = replaceLabeledMarkdownLine(localized, 'QA verdict', 'QA 判定', (value) => translateVerdict(value, value))
       localized = replaceLabeledMarkdownLine(localized, 'Verdict note', 'QA 補充說明')
@@ -348,6 +376,19 @@ function localizeArtifactContent(content) {
       localized = replaceLabeledMarkdownLine(localized, 'Peak memory', '記憶體峰值')
       localized = replaceLabeledMarkdownLine(localized, 'Underlying run exit code', '執行結束碼')
       localized = replaceLabeledMarkdownLine(localized, 'Best val_bpb', '最佳 val_bpb')
+      localized = replaceLabeledMarkdownLine(localized, 'Planned reruns', '預定複驗次數')
+      localized = replaceLabeledMarkdownLine(localized, 'Completed reruns', '實際完成複驗次數')
+      localized = replaceLabeledMarkdownLine(localized, 'Revalidation verdict', '複驗判定', (value) => translateRevalidationVerdict(value, value))
+      localized = replaceLabeledMarkdownLine(localized, 'Better than baseline', '比 baseline 更好的次數')
+      localized = replaceLabeledMarkdownLine(localized, 'Mean val_bpb', '複驗平均 val_bpb')
+      localized = replaceLabeledMarkdownLine(localized, 'Mean delta vs baseline', '複驗平均改善')
+      localized = replaceLabeledMarkdownLine(localized, 'Gap from kept run', '和保留版本的平均差距')
+      localized = replaceLabeledMarkdownLine(localized, 'val_bpb spread', '複驗波動幅度')
+      localized = replaceLabeledMarkdownLine(localized, 'Mean peak memory', '複驗平均記憶體')
+      localized = replaceLabeledMarkdownLine(localized, 'Mean throughput', '複驗平均吞吐量')
+      localized = replaceLabeledMarkdownLine(localized, 'Mean steps/sec', '複驗平均 steps/sec')
+      localized = replaceLabeledMarkdownLine(localized, 'Promotion ready', '是否可升格')
+      localized = replaceLabeledMarkdownLine(localized, 'Skip reason', '跳過原因')
 
       return localizeSentence(localized)
     })
@@ -454,6 +495,8 @@ function buildRoundFocus(snapshot) {
   const live = snapshot?.live || {}
   const control = snapshot?.control || {}
   const metrics = snapshot?.metrics || {}
+  const strategy = snapshot?.strategy || {}
+  const currentLane = strategy?.currentLane || {}
   const history = Array.isArray(metrics.history) ? metrics.history : []
   const latestExperiment = [...history].reverse().find((row) => row?.description && row.description !== 'baseline') || null
   const combined = [live.currentTask, live.lastAction, live.nextStep].filter(Boolean).join(' ').toLowerCase()
@@ -487,6 +530,18 @@ function buildRoundFocus(snapshot) {
   let goal = buildRoundGoal(metrics)
   let next = humanizeActionText(live.nextStep || live.lastAction, '等待下一個研究步驟。')
   let basis = '主要觀察指標是 val_bpb，數值越低代表這次優化越有效。'
+
+  if (currentLane?.label && (control?.isActive || live?.currentTask || live?.lastAction)) {
+    item = `目前主跑「${currentLane.label}」`
+    goal = currentLane.goal || goal
+    next = strategy?.nextLane?.label
+      ? `如果這條線停滯，下一步會切到「${strategy.nextLane.label}」再找新角度。`
+      : next
+    basis = currentLane.whyNow
+      || strategy?.stableMemoryCallout
+      || strategy?.cautionMemoryCallout
+      || basis
+  }
 
   if (combined.includes('baseline')) {
     item = '先建立目前模型的基準成績'
@@ -1112,6 +1167,15 @@ export default function AutoResearchControlRoom() {
       accent: '#ff6b35',
       icon: ShieldCheck,
     },
+    {
+      label: '自動複驗',
+      value: translateRevalidationVerdict(snapshot?.metrics?.revalidationVerdict),
+      hint: typeof snapshot?.metrics?.revalidationMeanValBpb === 'number'
+        ? `平均 val_bpb ${formatBpb(snapshot.metrics.revalidationMeanValBpb)}，波動 ${formatBpb(snapshot.metrics.revalidationSpread ?? 0)}。`
+        : '有進入自動複驗時，這裡會顯示穩定度。',
+      accent: '#c77dff',
+      icon: CheckCircle2,
+    },
   ]), [snapshot])
 
   const codexTrace = useMemo(() => {
@@ -1124,6 +1188,10 @@ export default function AutoResearchControlRoom() {
   const progressWidth = `${Math.min(Math.max(Number(runtime.progressPct || 0), 0), 100)}%`
   const softProgressWidth = `${Math.min(Math.max(Number(runtime.softProgressPct || 0), 0), 100)}%`
   const roundFocus = useMemo(() => buildRoundFocus(snapshot), [snapshot])
+  const currentLane = snapshot?.strategy?.currentLane || {}
+  const nextLane = snapshot?.strategy?.nextLane || {}
+  const searchSpace = snapshot?.strategy?.searchSpace || { lanes: [], allowedFiles: [], orchestration: {} }
+  const researchMemory = snapshot?.strategy?.researchMemory || { recommendedPatterns: [], avoidPatterns: [], entryCount: 0 }
   const primaryModelMeta = useMemo(
     () => findModelOption(modelOptions, strategyDraft.primaryModel),
     [modelOptions, strategyDraft.primaryModel],
@@ -1160,26 +1228,25 @@ export default function AutoResearchControlRoom() {
   )
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-4 py-10">
+    <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 md:py-8">
       <div className="space-y-8">
         <motion.section
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card rounded-[32px] p-8 md:p-10"
+          className="glass-card rounded-[32px] p-5 md:p-7"
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-4xl">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/8 px-4 py-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
                 <FlaskConical className="h-3.5 w-3.5" />
                 AutoResearch 控制台
               </div>
               <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
-                直接看到現在在跑哪一輪、
+                直接看這輪在跑什麼，
                 <span className="block text-cyan-300">有沒有真的變更好。</span>
               </h1>
-              <p className="mt-5 max-w-3xl text-sm leading-8 text-gray-300 md:text-base">
-                這裡把 AutoResearch 的研究分支、模型策略、最近實驗走勢、QA 檢查、記憶整理交接和執行紀錄
-                放在同一個控制台。你不用再切去 artifact 目錄翻檔案，打開這頁就能直接看懂這輪研究在做什麼、做到哪裡。
+              <p className="mt-5 max-w-3xl text-sm leading-7 text-gray-400 md:text-base">
+                研究分支、實驗走勢、QA、交接紀錄都集中在這裡。打開就知道目前做到哪一段，不用再翻 artifact。
               </p>
             </div>
 
@@ -1526,7 +1593,7 @@ export default function AutoResearchControlRoom() {
               </div>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               {metrics.map((metric) => (
                 <MetricCard key={metric.label} {...metric} />
               ))}
@@ -1593,6 +1660,16 @@ export default function AutoResearchControlRoom() {
                       最近一次主力模式：<span className="text-white">{snapshot.strategy.lastPrimaryRunTag || '待更新'}</span>
                       <br />
                       最近一次判定：<span className="text-white">{translateVerdict(snapshot.strategy.lastPrimaryResult)}</span>
+                      <br />
+                      最近一次複驗：<span className="text-white">{translateRevalidationVerdict(snapshot.strategy.lastRevalidationStatus)}</span>
+                    </div>
+                    <div className="rounded-[18px] border border-cyan-500/15 bg-black/25 px-4 py-3 text-[12px] leading-6 text-gray-300">
+                      <div>目前研究線：<span className="text-white">{currentLane.label || '待規劃'}</span></div>
+                      <div className="mt-1">{currentLane.goal || '這輪還沒寫入研究線目標。'}</div>
+                      <div className="mt-2 text-gray-500">{currentLane.whyNow || snapshot.strategy.planSummary || '下一輪開始前，策略器會依研究記憶與停滯次數重新挑選。'}</div>
+                      <div className="mt-2 text-cyan-200">先看：{joinHumanList(currentLane.focus)}</div>
+                      <div className="text-amber-200">先避開：{joinHumanList(currentLane.avoid)}</div>
+                      <div className="mt-2">若停滯就切到：<span className="text-white">{nextLane.label || '待規劃'}</span></div>
                     </div>
                     <div className="text-[11px] leading-6 text-gray-500">
                       這裡改的是之後要用的模型策略。正在跑的這一輪不會中途切換，會從下一輪手動啟動或固定排程開始生效。
@@ -1611,13 +1688,21 @@ export default function AutoResearchControlRoom() {
                 <div className="glass-card rounded-[28px] p-6">
                   <div className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-purple-300">
                     <GitBranch className="h-4 w-4" />
-                    研究工作區狀態
+                    研究邊界與工作區
                   </div>
                   <div className="mt-4 space-y-3 text-sm leading-7 text-gray-300">
                     <div>目前分支：<span className="text-white">{snapshot.repo.branch || '待更新'}</span></div>
                     <div>目前提交：<span className="text-white">{snapshot.repo.head || '待更新'}</span></div>
                     <div>Codex 登入：<span className="text-white">{humanizeCodexLogin(snapshot.repo.codexLogin)}</span></div>
                     <div>proxy-chatgpt：<span className="text-white">{humanizeProxyStatus(snapshot.repo.proxyReady)}</span></div>
+                    <div>允許修改檔案：<span className="text-white">{joinHumanList(searchSpace.allowedFiles)}</span></div>
+                    <div>固定訓練預算：<span className="text-white">{searchSpace.fixedBudgetMinutes || 5} 分鐘</span></div>
+                    <div>協作分工：<span className="text-white">{joinHumanList(Object.values(searchSpace.orchestration || {}))}</span></div>
+                    <div className="rounded-[18px] border border-white/8 bg-black/25 px-4 py-3 text-[12px] leading-6 text-gray-400">
+                      可用研究線：{Array.isArray(searchSpace.lanes) && searchSpace.lanes.length
+                        ? searchSpace.lanes.map((lane) => lane.label || lane.id).join('、')
+                        : '待更新'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1663,6 +1748,12 @@ export default function AutoResearchControlRoom() {
                   accent="#00f5ff"
                   path={snapshot.artifacts.summary?.path}
                   content={snapshot.artifacts.summary?.content}
+                />
+                <ArtifactPanel
+                  title="自動複驗"
+                  accent="#c77dff"
+                  path={snapshot.artifacts.revalidationReport?.path}
+                  content={snapshot.artifacts.revalidationReport?.content}
                 />
                 <ArtifactPanel
                   title="QA 報告"
@@ -1716,16 +1807,51 @@ export default function AutoResearchControlRoom() {
                   <p>保留下來的關鍵作法：{localizeSentence(snapshot.highlights.bestIdea) || '等這輪摘要寫完後會顯示在這裡。'}</p>
                   <p>最終保留 commit：<span className="text-white">{snapshot.highlights.finalCommit || '待更新'}</span></p>
                   <p>記憶體峰值：<span className="text-white">{snapshot.highlights.peakMemory || '待更新'}</span></p>
+                  <p>複驗判定：<span className="text-white">{translateRevalidationVerdict(snapshot.metrics.revalidationVerdict)}</span></p>
                   <p>{snapshot.highlights.memorySummary ? localizeArtifactContent(snapshot.highlights.memorySummary) : '記憶整理完成後，這裡會補上濃縮版學習。'}</p>
                 </div>
               </div>
 
               <div className="glass-card rounded-[28px] p-6">
-                <div className="text-sm uppercase tracking-[0.18em] text-green-300">本機資料來源</div>
-                <div className="mt-4 space-y-3 text-[11px] leading-6 text-gray-400">
-                  <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{snapshot.repo.projectDir}</div>
-                  <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{snapshot.repo.resultsPath}</div>
-                  <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{snapshot.strategy.latestStrategyReportPath || '尚未產生策略報告'}</div>
+                <div className="text-sm uppercase tracking-[0.18em] text-green-300">研究記憶與資料來源</div>
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3 text-sm leading-7 text-gray-300">
+                    <div>研究記憶條目：<span className="text-white">{researchMemory.entryCount || 0}</span></div>
+                    <div>最近更新：<span className="text-white">{formatShortTimestamp(researchMemory.updatedAt)}</span></div>
+                    <div className="mt-2 text-gray-400">{snapshot.strategy.stableMemoryCallout || snapshot.strategy.cautionMemoryCallout || '這裡會逐漸累積哪條研究線最穩、哪條線容易波動。'}</div>
+                  </div>
+                  <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3 text-sm leading-7 text-gray-300">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-green-300">目前建議放大的模式</div>
+                    <div className="mt-2 space-y-2">
+                      {researchMemory.recommendedPatterns?.length ? researchMemory.recommendedPatterns.map((pattern) => (
+                        <div key={`${pattern.laneId}-${pattern.summary}`} className="rounded-2xl border border-white/8 bg-black/20 px-3 py-3 text-gray-300">
+                          <div className="font-semibold text-white">{pattern.label || '未命名研究線'}</div>
+                          <div className="mt-1 text-xs leading-6 text-gray-400">{pattern.summary}</div>
+                        </div>
+                      )) : (
+                        <div className="text-xs leading-6 text-gray-500">還沒有足夠穩定的重複證據。</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-[22px] border border-amber-500/15 bg-black/25 px-4 py-3 text-sm leading-7 text-gray-300">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-amber-300">目前先別重押的模式</div>
+                    <div className="mt-2 space-y-2">
+                      {researchMemory.avoidPatterns?.length ? researchMemory.avoidPatterns.map((pattern) => (
+                        <div key={`${pattern.laneId}-${pattern.summary}`} className="rounded-2xl border border-white/8 bg-black/20 px-3 py-3 text-gray-300">
+                          <div className="font-semibold text-white">{pattern.label || '未命名研究線'}</div>
+                          <div className="mt-1 text-xs leading-6 text-gray-400">{pattern.summary}</div>
+                        </div>
+                      )) : (
+                        <div className="text-xs leading-6 text-gray-500">目前還沒有明顯需要避開的研究線。</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-3 text-[11px] leading-6 text-gray-400">
+                    <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{snapshot.repo.projectDir}</div>
+                    <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{snapshot.repo.resultsPath}</div>
+                    <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{snapshot.strategy.latestStrategyReportPath || '尚未產生策略報告'}</div>
+                    <div className="rounded-[22px] border border-green-500/15 bg-black/25 px-4 py-3">{researchMemory.path || '尚未產生研究記憶索引'}</div>
+                  </div>
                 </div>
               </div>
             </section>

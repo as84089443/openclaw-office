@@ -275,7 +275,7 @@ export default function FnbOpsConsole() {
       const response = await fetch(`/api/fnb/ops${params.size ? `?${params.toString()}` : ''}`)
       const data = await response.json()
       if (response.status === 401) {
-        handleUnauthorized(data.error || '需要內部營運驗證碼才能查看這頁。')
+        handleUnauthorized('需要內部營運驗證碼才能查看這頁。')
         return
       }
       if (!response.ok || !data.ok) {
@@ -310,7 +310,7 @@ export default function FnbOpsConsole() {
       })
       const data = await response.json()
       if (response.status === 401) {
-        handleUnauthorized(data.error || '需要內部營運驗證碼才能執行這些操作。')
+        handleUnauthorized('需要內部營運驗證碼才能執行這些操作。')
         return null
       }
       if (!response.ok || !data.ok) {
@@ -486,18 +486,32 @@ export default function FnbOpsConsole() {
 
   if (authRequired) {
     return (
-      <div className="glass-card rounded-2xl p-6">
-        <div className="max-w-xl space-y-5">
-          <div>
-            <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
-              <ShieldAlert className="h-4 w-4" />
-              <span>需要營運權限</span>
-            </div>
-            <h2 className="font-display text-3xl text-white">輸入內部營運驗證碼</h2>
-            <p className="mt-3 text-sm leading-7 text-gray-300">
-              這頁和相關營運 API 現在只接受 `FNB_INTERNAL_API_TOKEN`。驗證成功後會在這個瀏覽器建立登入狀態，
-              之後就不需要重複輸入。
-            </p>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="glass-card rounded-[32px] p-6 md:p-7">
+          <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
+            <ShieldAlert className="h-4 w-4" />
+            <span>營運台</span>
+          </div>
+          <h2 className="font-display text-3xl leading-tight text-white">
+            只有在接店、補例外、
+            <span className="block text-cyan-300">協作時才需要進來。</span>
+          </h2>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-400">
+            這裡不是店家頁，也不是首頁。它只處理 onboarding、接線狀態、例外與協作，所以需要一次內部驗證。
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-2 text-xs text-gray-400">
+            <span className="rounded-full border border-white/10 px-3 py-1">onboarding</span>
+            <span className="rounded-full border border-white/10 px-3 py-1">例外處理</span>
+            <span className="rounded-full border border-white/10 px-3 py-1">綁定與接線</span>
+            <span className="rounded-full border border-white/10 px-3 py-1">協作交接</span>
+          </div>
+        </div>
+
+        <div className="glass-card rounded-[32px] p-6 md:p-7">
+          <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">一次驗證即可</div>
+          <div className="mt-2 text-sm leading-7 text-gray-400">
+            成功後會在這個瀏覽器保留登入狀態，之後就不用重複貼 token。
           </div>
 
           <Field label="營運驗證碼" hint="使用 Render 或 `.env.local` 裡的 `FNB_INTERNAL_API_TOKEN`。">
@@ -518,7 +532,7 @@ export default function FnbOpsConsole() {
           <div className="flex flex-wrap gap-3">
             <ActionButton onClick={submitOpsAuth} disabled={authBusy} tone="#00f5ff">
               <ShieldAlert className="mr-1 inline h-4 w-4" />
-              驗證並進入營運總覽
+              進入營運總覽
             </ActionButton>
           </div>
         </div>
@@ -528,20 +542,19 @@ export default function FnbOpsConsole() {
 
   return (
     <div className="space-y-6">
-      <div className="glass-card rounded-2xl p-6">
+      <div className="glass-card rounded-[32px] p-6 md:p-7">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
               <Store className="h-4 w-4" />
-              <span>AI 餐飲 SaaS 低負擔版營運台</span>
+              <span>營運總覽</span>
             </div>
             <h2 className="font-display text-3xl text-white">
               {snapshot?.location?.name || '建立第一間試點商家'}
               <span className="ml-3 text-base text-gray-500">{snapshot?.location?.restaurantType || '試點導入中'}</span>
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-gray-300">
-              目標是讓店家每週只花 15 分鐘內處理必要決策。系統先自動排出內容、推播與回流動作，
-              只有高風險與缺資料的情況才打擾店家。
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-gray-400">
+              這一頁只做三件事：看店點就緒度、處理例外、安排下一步。不是拿來看說明書的。
             </p>
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-400">
               <span className="rounded-full border border-white/10 px-3 py-1">品牌：{snapshot?.tenant?.name || '尚未建立'}</span>
@@ -655,12 +668,27 @@ export default function FnbOpsConsole() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.92fr,1.08fr]">
-        <div className="glass-card rounded-xl p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <NotebookPen className="h-4 w-4 text-cyan-300" />
-            <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">店家導入設定</div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
+        <details className="glass-card rounded-xl p-5" open={!snapshot}>
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <NotebookPen className="h-4 w-4 text-cyan-300" />
+                <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">
+                  {snapshot ? '新增試點店' : '建立第一間試點店'}
+                </div>
+              </div>
+              <div className="mt-2 text-sm leading-6 text-gray-400">
+                {snapshot
+                  ? '現在主畫面先看既有店點營運，這裡只在要新增下一家店時再展開。'
+                  : '先把品牌、店點和低負擔規則建起來，後面才會有完整的商家入口與營運流程。'}
+              </div>
+            </div>
+            <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-gray-300">
+              {snapshot ? '展開表單' : '正在填表'}
+            </div>
+          </summary>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
             <Field label="租戶名稱" hint="通常是品牌或經營主體。">
               <TextInput
                 value={onboardingForm.tenantName}
@@ -784,13 +812,13 @@ export default function FnbOpsConsole() {
               建立後會自動產生店家綁定入口、營運入口與店點資料。
             </div>
           </div>
-        </div>
+        </details>
 
         <div className="space-y-4">
           <div className="glass-card rounded-xl p-5">
             <div className="mb-4 flex items-center gap-2">
               <Link2 className="h-4 w-4 text-green-300" />
-              <div className="text-sm uppercase tracking-[0.18em] text-green-300">工作區狀態</div>
+              <div className="text-sm uppercase tracking-[0.18em] text-green-300">工作區就緒度</div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {setupStatusItems.map((item) => (
@@ -821,7 +849,7 @@ export default function FnbOpsConsole() {
           <div className="glass-card rounded-xl p-5">
             <div className="mb-4 flex items-center gap-2">
               <ExternalLink className="h-4 w-4 text-cyan-300" />
-              <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">店家入口連結</div>
+              <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">入口與綁定連結</div>
             </div>
             {activeLinks ? (
               <div className="space-y-3">

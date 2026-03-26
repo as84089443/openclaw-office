@@ -21,8 +21,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        display: ['Orbitron', 'monospace'],
-        body: ['JetBrains Mono', 'monospace'],
+        display: ['Sora', 'Noto Sans TC', 'sans-serif'],
+        body: ['Noto Sans TC', 'sans-serif'],
         pixel: ['Press Start 2P', 'monospace'],
       },
       animation: {

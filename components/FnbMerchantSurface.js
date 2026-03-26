@@ -117,7 +117,7 @@ function TabButton({ tab, active, onClick, badge = null }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-[22px] border px-4 py-3 text-left transition"
+      className="min-w-[148px] rounded-[22px] border px-4 py-3 text-left transition md:min-w-0"
       style={{
         borderColor: active ? `${tab.tone}80` : 'rgba(148, 163, 184, 0.2)',
         background: active ? `${tab.tone}18` : 'rgba(10, 10, 15, 0.52)',
@@ -481,7 +481,7 @@ export default function FnbMerchantSurface() {
           <div className="text-sm text-gray-300">{error || '載入商家工作台…'}</div>
           {error ? (
             <div className="mt-4 text-xs leading-6 text-gray-500">
-              這個商家入口已與原本的 SuperFish 分開。下一步請填入獨立的 `LINE_*` 與 `NEXT_PUBLIC_LINE_LIFF_ID`。
+              商家入口還沒完成接線。先確認獨立的 `LINE_*` 與 `NEXT_PUBLIC_LINE_LIFF_ID`。
             </div>
           ) : null}
         </div>
@@ -490,43 +490,55 @@ export default function FnbMerchantSurface() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-4 py-6">
+    <main className="mx-auto max-w-6xl px-4 py-6">
       <div className="space-y-5">
         <motion.section
-          className="glass-card rounded-[28px] p-5"
+          className="glass-card rounded-[32px] p-5 md:p-6"
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_320px]">
             <div>
               <div className="flex items-center gap-2 text-sm text-cyan-300">
                 <Store className="h-4 w-4" />
                 <span>Merchant Copilot / LINE OA</span>
               </div>
               <h1 className="mt-3 font-display text-3xl text-white">{home.location.name}</h1>
-              <p className="mt-3 text-sm leading-7 text-gray-300">
-                待審核、顧客摘要、店家設定與週摘要都集中在這裡。需要你點頭的事才推播，其餘由系統先處理。
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-gray-400">
+                先決定今天要不要點頭，再補顧客資訊和設定。不是每天都要逛完整個後台。
               </p>
-            </div>
 
-            <div className="rounded-2xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-right">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-green-300">本週負擔</div>
-              <div className="mt-1 text-2xl font-bold text-white">{home.metrics.merchantApprovalsPending}</div>
-              <div className="mt-1 text-[11px] text-gray-400">
-                目標 {home.metrics.merchantTimeBudgetMinutes} 分鐘內
+              <div className="mt-5 flex flex-wrap gap-2">
+                <StatusPill tone="#39ff14">{home.operator.displayName}</StatusPill>
+                <StatusPill tone="#00f5ff">{home.activeMembership.role}</StatusPill>
+                <StatusPill tone={LIFF_ID ? '#ffb703' : '#94a3b8'}>
+                  {LIFF_ID ? 'LIFF 已配置' : 'Demo / Web fallback'}
+                </StatusPill>
+                {liffState.profile?.displayName ? (
+                  <StatusPill tone="#ff6b35">{liffState.profile.displayName}</StatusPill>
+                ) : null}
               </div>
             </div>
-          </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <StatusPill tone="#39ff14">{home.operator.displayName}</StatusPill>
-            <StatusPill tone="#00f5ff">{home.activeMembership.role}</StatusPill>
-            <StatusPill tone={LIFF_ID ? '#ffb703' : '#94a3b8'}>
-              {LIFF_ID ? 'LIFF 已配置' : 'Demo / Web fallback'}
-            </StatusPill>
-            {liffState.profile?.displayName ? (
-              <StatusPill tone="#ff6b35">{liffState.profile.displayName}</StatusPill>
-            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-[24px] border border-cyan-500/25 bg-cyan-500/8 p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-300">今天先看</div>
+                <div className="mt-2 text-3xl font-bold text-white">{home.metrics.merchantApprovalsPending}</div>
+                <div className="mt-2 text-sm leading-6 text-gray-300">件待你點頭的項目</div>
+              </div>
+              <div className="rounded-[24px] border border-green-500/25 bg-green-500/8 p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-green-300">本週已省下</div>
+                <div className="mt-2 text-3xl font-bold text-white">{home.metrics.autoPublishedThisWeek}</div>
+                <div className="mt-2 text-sm leading-6 text-gray-300">
+                  則自動完成，目標 {home.metrics.merchantTimeBudgetMinutes} 分鐘內
+                </div>
+              </div>
+              <div className="rounded-[24px] border border-yellow-500/25 bg-yellow-500/8 p-4 sm:col-span-2 xl:col-span-1">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-yellow-300">顧客摘要</div>
+                <div className="mt-2 text-3xl font-bold text-white">{home.customers.length}</div>
+                <div className="mt-2 text-sm leading-6 text-gray-300">位有摘要的顧客，方便快速回想熟客偏好。</div>
+              </div>
+            </div>
           </div>
 
           {home.memberships.length > 1 ? (
@@ -559,7 +571,7 @@ export default function FnbMerchantSurface() {
         </motion.section>
 
         <motion.section
-          className="grid grid-cols-2 gap-3"
+          className="flex gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible md:pb-0"
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
@@ -575,202 +587,193 @@ export default function FnbMerchantSurface() {
           ))}
         </motion.section>
 
-        <motion.section
-          className="grid grid-cols-2 gap-3"
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <MetricCard
-            label="自動完成"
-            value={home.metrics.autoPublishedThisWeek}
-            hint="這些事情系統已先處理，不需要你人工進後台。"
-            tone="#39ff14"
-            icon={CheckCircle2}
-          />
-          <MetricCard
-            label="顧客摘要"
-            value={home.customers.length}
-            hint="這是 v1 的輕量 CRM，只保留標籤、備註與最近互動。"
-            tone="#ffb703"
-            icon={Users}
-          />
-        </motion.section>
-
-        <motion.section
-          className="glass-card rounded-[28px] p-5"
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.11 }}
-        >
-          <div className="flex items-center gap-2 text-cyan-300">
-            <Bot className="h-4 w-4" />
-            <span className="text-sm uppercase tracking-[0.18em]">自然語言 Copilot</span>
-          </div>
-
-          <div className="mt-4 rounded-3xl border border-cyan-500/20 bg-cyan-500/6 p-4">
-            <div className="text-sm leading-7 text-gray-200">
-              直接跟我說你想要的文案方向。我會先整理成草稿，完成後再推回來讓你同意、再改或跳過。
-            </div>
-            <textarea
-              value={chatDraft}
-              onChange={(event) => setChatDraft(event.target.value)}
-              rows={3}
-              className="mt-4 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-gray-600"
-              placeholder="例如：幫我寫這週平日下午茶促銷文案，口吻像熟客推薦，不要太硬銷。"
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <MerchantButton tone="#00f5ff" disabled={Boolean(busy) || !chatDraft.trim()} onClick={() => submitCopilotMessage()}>
-                送出需求
-              </MerchantButton>
-              <MerchantButton
-                tone="#39ff14"
-                subtle
-                disabled={Boolean(busy)}
-                onClick={() => submitCopilotMessage('幫我寫這週平日下午茶促銷文案，口吻像熟客推薦。')}
-              >
-                下午茶促銷
-              </MerchantButton>
-              <MerchantButton
-                tone="#ffb703"
-                subtle
-                disabled={Boolean(busy)}
-                onClick={() => submitCopilotMessage('把剛剛那篇縮短到適合 LINE 推播。')}
-              >
-                縮短成推播
-              </MerchantButton>
-            </div>
-          </div>
-
-          {home.merchantCopilot?.activeThreadMessages?.length ? (
-            <div className="mt-4 space-y-3">
-              {home.merchantCopilot.activeThreadMessages.slice(-4).map((message) => (
-                <div
-                  key={message.id}
-                  className="rounded-2xl border px-4 py-3 text-sm leading-7"
-                  style={{
-                    borderColor: message.role === 'merchant' ? 'rgba(0,245,255,0.24)' : 'rgba(57,255,20,0.2)',
-                    background: message.role === 'merchant' ? 'rgba(0,245,255,0.08)' : 'rgba(57,255,20,0.08)',
-                  }}
-                >
-                  <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-gray-500">
-                    {message.role === 'merchant' ? '你' : 'Copilot'}
-                  </div>
-                  <div className="text-gray-100">{message.body}</div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="mt-4 space-y-3">
-            {(home.merchantCopilot?.tasks || []).length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-gray-700 px-4 py-6 text-sm text-gray-500">
-                還沒有新的自然語言任務。你可以直接用上面的輸入框告訴我想要的文案。
-              </div>
-            ) : (
-              (home.merchantCopilot?.tasks || []).map((task) => (
-                <div key={task.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-white">{task.title || 'Merchant Copilot 任務'}</div>
-                    <StatusPill tone={task.status === 'completed' ? '#39ff14' : task.status === 'ops-review' || task.status === 'failed' ? '#fb7185' : '#00f5ff'}>
-                      {formatTaskStatus(task.status)}
-                    </StatusPill>
-                  </div>
-                  <div className="mt-2 text-sm leading-7 text-gray-300">{task.instructionText}</div>
-                  {task.outputDraft?.title ? (
-                    <div className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/8 px-3 py-3 text-sm text-gray-100">
-                      <div className="font-semibold text-white">{task.outputDraft.title}</div>
-                      <div className="mt-2 whitespace-pre-line leading-7 text-gray-300">{task.outputDraft.body}</div>
-                    </div>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-        </motion.section>
-
         {activeTab === 'approvals' ? (
-          <motion.section
-            className="glass-card rounded-[28px] p-5"
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12 }}
-          >
-            <div className="flex items-center gap-2 text-cyan-300">
-              <BellRing className="h-4 w-4" />
-              <span className="text-sm uppercase tracking-[0.18em]">待審核</span>
-            </div>
-
-            <div className="mt-4 space-y-4">
-              {approvalCards.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
-                  目前沒有需要你決定的項目。這代表系統有把工作量壓在目標範圍內。
+          <>
+            <motion.section
+              className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <div className="glass-card rounded-[28px] p-5">
+                <div className="flex items-center gap-2 text-cyan-300">
+                  <Bot className="h-4 w-4" />
+                  <span className="text-sm uppercase tracking-[0.18em]">快速交代 Copilot</span>
                 </div>
-              ) : null}
+                <div className="mt-3 text-sm leading-7 text-gray-300">
+                  要寫什麼、想改哪個方向，直接講一句就好。我會先整理成草稿，再回來讓你決定。
+                </div>
+                <textarea
+                  value={chatDraft}
+                  onChange={(event) => setChatDraft(event.target.value)}
+                  rows={4}
+                  className="mt-4 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-gray-600"
+                  placeholder="例如：幫我寫這週平日下午茶促銷文案，口吻像熟客推薦，不要太硬銷。"
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <MerchantButton tone="#00f5ff" disabled={Boolean(busy) || !chatDraft.trim()} onClick={() => submitCopilotMessage()}>
+                    送出需求
+                  </MerchantButton>
+                  <MerchantButton
+                    tone="#39ff14"
+                    subtle
+                    disabled={Boolean(busy)}
+                    onClick={() => submitCopilotMessage('幫我寫這週平日下午茶促銷文案，口吻像熟客推薦。')}
+                  >
+                    下午茶促銷
+                  </MerchantButton>
+                  <MerchantButton
+                    tone="#ffb703"
+                    subtle
+                    disabled={Boolean(busy)}
+                    onClick={() => submitCopilotMessage('把剛剛那篇縮短到適合 LINE 推播。')}
+                  >
+                    縮短成推播
+                  </MerchantButton>
+                </div>
+              </div>
 
-              {approvalCards.map((approval) => (
-                <div
-                  key={approval.id}
-                  className="rounded-3xl border border-cyan-500/20 bg-cyan-500/6 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-base font-semibold text-white">{approval.title}</div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        預計 {formatDate(approval.scheduledFor)} 發送
+              <div className="glass-card rounded-[28px] p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-green-300">
+                    <Sparkles className="h-4 w-4" />
+                    <span className="text-sm uppercase tracking-[0.18em]">目前進度</span>
+                  </div>
+                  <StatusPill tone={(home.merchantCopilot?.tasks || []).length ? '#00f5ff' : '#94a3b8'}>
+                    {(home.merchantCopilot?.tasks || []).length ? `待處理 ${(home.merchantCopilot?.tasks || []).length}` : '目前清空'}
+                  </StatusPill>
+                </div>
+
+                {(home.merchantCopilot?.tasks || []).length === 0 ? (
+                  <div className="mt-4 rounded-2xl border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
+                    還沒有新的自然語言任務。你可以直接用左邊輸入框交代想做的事。
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {(home.merchantCopilot?.tasks || []).slice(0, 3).map((task) => (
+                      <div key={task.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-white">{task.title || 'Merchant Copilot 任務'}</div>
+                          <StatusPill tone={task.status === 'completed' ? '#39ff14' : task.status === 'ops-review' || task.status === 'failed' ? '#fb7185' : '#00f5ff'}>
+                            {formatTaskStatus(task.status)}
+                          </StatusPill>
+                        </div>
+                        <div className="mt-2 text-sm leading-7 text-gray-300">{task.instructionText}</div>
+                        {task.outputDraft?.title ? (
+                          <div className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/8 px-3 py-3 text-sm text-gray-100">
+                            <div className="font-semibold text-white">{task.outputDraft.title}</div>
+                            <div className="mt-2 whitespace-pre-line leading-7 text-gray-300">{task.outputDraft.body}</div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {home.merchantCopilot?.activeThreadMessages?.length ? (
+                  <div className="mt-4 space-y-2 border-t border-white/8 pt-4">
+                    {home.merchantCopilot.activeThreadMessages.slice(-3).map((message) => (
+                      <div
+                        key={message.id}
+                        className="rounded-2xl border px-4 py-3 text-sm leading-7"
+                        style={{
+                          borderColor: message.role === 'merchant' ? 'rgba(0,245,255,0.24)' : 'rgba(57,255,20,0.2)',
+                          background: message.role === 'merchant' ? 'rgba(0,245,255,0.08)' : 'rgba(57,255,20,0.08)',
+                        }}
+                      >
+                        <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-gray-500">
+                          {message.role === 'merchant' ? '你' : 'Copilot'}
+                        </div>
+                        <div className="text-gray-100">{message.body}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </motion.section>
+
+            <motion.section
+              className="glass-card rounded-[28px] p-5"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.12 }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-cyan-300">
+                  <BellRing className="h-4 w-4" />
+                  <span className="text-sm uppercase tracking-[0.18em]">待審核</span>
+                </div>
+                <div className="text-xs text-gray-500">只看真的需要點頭的項目</div>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {approvalCards.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
+                    目前沒有需要你決定的項目。這代表系統有把工作量壓在目標範圍內。
+                  </div>
+                ) : null}
+
+                {approvalCards.map((approval) => (
+                  <div
+                    key={approval.id}
+                    className="rounded-3xl border border-cyan-500/20 bg-cyan-500/6 p-4"
+                  >
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="max-w-3xl">
+                        <div className="text-base font-semibold text-white">{approval.title}</div>
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+                          <span>預計 {formatDate(approval.scheduledFor)} 發送</span>
+                          <span>風險 {Math.round((approval.riskScore || 0) * 100)}%</span>
+                        </div>
+                        <div className="mt-3 whitespace-pre-line text-sm leading-7 text-gray-300">
+                          {approval.merchantMessage}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <MerchantButton
+                          tone="#39ff14"
+                          disabled={Boolean(busy)}
+                          onClick={() => submitApproval(approval.id, 'approve')}
+                        >
+                          同意排程
+                        </MerchantButton>
+                        {approval.payload?.origin === 'merchant-copilot' ? (
+                          <MerchantButton
+                            tone="#ffb703"
+                            disabled={Boolean(busy)}
+                            onClick={() => submitApproval(approval.id, 'rewrite')}
+                          >
+                            再改一版
+                          </MerchantButton>
+                        ) : (
+                          <MerchantButton
+                            tone="#ffb703"
+                            disabled={Boolean(busy)}
+                            onClick={() => submitApproval(approval.id, 'reschedule')}
+                          >
+                            延到明天
+                          </MerchantButton>
+                        )}
+                        <MerchantButton
+                          tone="#fb7185"
+                          disabled={Boolean(busy)}
+                          onClick={() => submitApproval(approval.id, 'skip')}
+                        >
+                          先跳過
+                        </MerchantButton>
                       </div>
                     </div>
-                    <StatusPill tone={approval.riskScore >= 0.5 ? '#fb7185' : '#39ff14'}>
-                      風險 {Math.round((approval.riskScore || 0) * 100)}%
-                    </StatusPill>
                   </div>
-
-                  <div className="mt-3 whitespace-pre-line text-sm leading-7 text-gray-300">
-                    {approval.merchantMessage}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <MerchantButton
-                      tone="#39ff14"
-                      disabled={Boolean(busy)}
-                      onClick={() => submitApproval(approval.id, 'approve')}
-                    >
-                      同意排程
-                    </MerchantButton>
-                    {approval.payload?.origin === 'merchant-copilot' ? (
-                      <MerchantButton
-                        tone="#ffb703"
-                        disabled={Boolean(busy)}
-                        onClick={() => submitApproval(approval.id, 'rewrite')}
-                      >
-                        再改一版
-                      </MerchantButton>
-                    ) : (
-                      <MerchantButton
-                        tone="#ffb703"
-                        disabled={Boolean(busy)}
-                        onClick={() => submitApproval(approval.id, 'reschedule')}
-                      >
-                        延到明天
-                      </MerchantButton>
-                    )}
-                    <MerchantButton
-                      tone="#fb7185"
-                      disabled={Boolean(busy)}
-                      onClick={() => submitApproval(approval.id, 'skip')}
-                    >
-                      先跳過
-                    </MerchantButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.section>
+                ))}
+              </div>
+            </motion.section>
+          </>
         ) : null}
 
         {activeTab === 'customers' ? (
           <motion.section
-            className="space-y-4"
+            className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12 }}
@@ -887,7 +890,7 @@ export default function FnbMerchantSurface() {
 
         {activeTab === 'settings' ? (
           <motion.section
-            className="space-y-4"
+            className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12 }}
@@ -895,7 +898,7 @@ export default function FnbMerchantSurface() {
             <div className="glass-card rounded-[28px] p-5">
               <div className="flex items-center gap-2 text-yellow-300">
                 <Settings2 className="h-4 w-4" />
-                <span className="text-sm uppercase tracking-[0.18em]">店家設定</span>
+                <span className="text-sm uppercase tracking-[0.18em]">設定進度</span>
               </div>
 
               <div className="mt-4 space-y-3">
@@ -910,36 +913,38 @@ export default function FnbMerchantSurface() {
               </div>
             </div>
 
-            <div className="glass-card rounded-[28px] p-5">
-              <div className="text-xs uppercase tracking-[0.18em] text-gray-500">品牌語氣</div>
-              <div className="mt-3 text-sm leading-7 text-gray-200">{home.settings.brandPack.voice}</div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {home.settings.brandPack.guardrails.map((guardrail) => (
-                  <StatusPill key={guardrail} tone="#fb7185">{guardrail}</StatusPill>
-                ))}
+            <div className="space-y-4">
+              <div className="glass-card rounded-[28px] p-5">
+                <div className="text-xs uppercase tracking-[0.18em] text-gray-500">品牌語氣</div>
+                <div className="mt-3 text-sm leading-7 text-gray-200">{home.settings.brandPack.voice}</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {home.settings.brandPack.guardrails.map((guardrail) => (
+                    <StatusPill key={guardrail} tone="#fb7185">{guardrail}</StatusPill>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/8 p-4 text-sm leading-7 text-gray-200">
+                  merchant 端只保留低負擔摘要。較完整的素材和規則調整，仍由 ops 端處理。
+                </div>
               </div>
 
-              <div className="mt-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/8 p-4 text-sm leading-7 text-gray-200">
-                目前 merchant 端只保留低負擔設定摘要。較完整的素材與規則調整，仍由 ops 端處理，避免店家被迫管理太多欄位。
-              </div>
-            </div>
-
-            <div className="glass-card rounded-[28px] p-5">
-              <div className="text-xs uppercase tracking-[0.18em] text-gray-500">渠道健康度</div>
-              <div className="mt-4 space-y-3">
-                {home.settings.channels.map((channel) => (
-                  <div key={channel.channel} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm text-white">{channel.channel}</div>
-                      <StatusPill tone={channel.status === 'connected' ? '#39ff14' : '#ffb703'}>
-                        {channel.status}
-                      </StatusPill>
+              <div className="glass-card rounded-[28px] p-5">
+                <div className="text-xs uppercase tracking-[0.18em] text-gray-500">渠道健康度</div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {home.settings.channels.map((channel) => (
+                    <div key={channel.channel} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm text-white">{channel.channel}</div>
+                        <StatusPill tone={channel.status === 'connected' ? '#39ff14' : '#ffb703'}>
+                          {channel.status}
+                        </StatusPill>
+                      </div>
+                      {channel.lastError ? (
+                        <div className="mt-2 text-xs text-red-300">{channel.lastError}</div>
+                      ) : null}
                     </div>
-                    {channel.lastError ? (
-                      <div className="mt-2 text-xs text-red-300">{channel.lastError}</div>
-                    ) : null}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </motion.section>
@@ -947,7 +952,7 @@ export default function FnbMerchantSurface() {
 
         {activeTab === 'digest' ? (
           <motion.section
-            className="space-y-4"
+            className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12 }}
@@ -991,10 +996,24 @@ export default function FnbMerchantSurface() {
               </div>
             </div>
 
-            <div className="glass-card rounded-[28px] p-5">
-              <div className="text-xs uppercase tracking-[0.18em] text-gray-500">下週建議</div>
-              <div className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/8 p-4 text-sm leading-7 text-gray-200">
-                {home.latestDigest?.recommendedNextAction}
+            <div className="space-y-4">
+              <div className="glass-card rounded-[28px] p-5">
+                <div className="text-xs uppercase tracking-[0.18em] text-gray-500">下週建議</div>
+                <div className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/8 p-4 text-sm leading-7 text-gray-200">
+                  {home.latestDigest?.recommendedNextAction}
+                </div>
+              </div>
+
+              <div className="glass-card rounded-[28px] p-5">
+                <div className="text-xs uppercase tracking-[0.18em] text-gray-500">這週怎麼看</div>
+                <div className="mt-3 space-y-3 text-sm leading-7 text-gray-300">
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    先看領券和導航，確認內容有沒有把人帶回來。
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    再看友加和摘要閱讀率，判斷 LINE 入口是否還有黏著度。
+                  </div>
+                </div>
               </div>
             </div>
           </motion.section>

@@ -77,25 +77,28 @@ function getGaugeColor(percent) {
   return CYBER_TONES.green
 }
 
-function GaugeCard({ icon: Icon, label, percent, valueText, tone }) {
+function GaugeCard({ icon: Icon, label, percent, valueText, tone, compact = false }) {
   const safePercent = Number.isFinite(percent) ? Math.max(0, Math.min(percent, 100)) : 0
   const dashOffset = GAUGE_CIRCUMFERENCE * (1 - safePercent / 100)
 
   return (
     <div
-      className="rounded-[28px] border px-4 py-5 text-center"
+      className={compact ? 'rounded-[24px] border px-3 py-4 text-center' : 'rounded-[28px] border px-4 py-5 text-center'}
       style={{
         borderColor: tone.border,
         background: 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.18))',
         boxShadow: `inset 0 0 0 1px ${tone.glow}, 0 0 24px ${tone.glow}`,
       }}
     >
-      <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em]" style={{ color: tone.solid }}>
+      <div
+        className={compact ? 'inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em]' : 'inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em]'}
+        style={{ color: tone.solid }}
+      >
         <Icon className="h-3.5 w-3.5" />
         {label}
       </div>
 
-      <div className="mt-4 flex items-center justify-center">
+      <div className={compact ? 'mt-3 flex items-center justify-center' : 'mt-4 flex items-center justify-center'}>
         <div className="relative" style={{ height: GAUGE_SIZE, width: GAUGE_SIZE }}>
           <svg className="-rotate-90" height={GAUGE_SIZE} width={GAUGE_SIZE} viewBox={`0 0 ${GAUGE_SIZE} ${GAUGE_SIZE}`}>
             <circle
@@ -129,18 +132,22 @@ function GaugeCard({ icon: Icon, label, percent, valueText, tone }) {
         </div>
       </div>
 
-      <div className="mt-3 text-sm text-gray-200">{valueText}</div>
+      <div className={compact ? 'mt-2 text-[11px] leading-5 text-gray-300' : 'mt-3 text-sm text-gray-200'}>
+        {valueText}
+      </div>
     </div>
   )
 }
 
-function LoadingState() {
+function LoadingState({ compact = false }) {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className={compact ? 'grid grid-cols-3 gap-3' : 'grid gap-4 md:grid-cols-3'}>
       {Array.from({ length: 3 }).map((_, index) => (
         <div
           key={`loading-ring-${index}`}
-          className="flex min-h-[184px] items-center justify-center rounded-[28px] border border-cyan-400/15 bg-black/10"
+          className={compact
+            ? 'flex min-h-[144px] items-center justify-center rounded-[24px] border border-cyan-400/15 bg-black/10'
+            : 'flex min-h-[184px] items-center justify-center rounded-[28px] border border-cyan-400/15 bg-black/10'}
         >
           <div className="h-20 w-20 animate-spin rounded-full border-[6px] border-cyan-400/15 border-t-cyan-300 shadow-[0_0_24px_rgba(0,245,255,0.15)]" />
         </div>
@@ -149,9 +156,9 @@ function LoadingState() {
   )
 }
 
-function ErrorState({ error, onRetry, busy }) {
+function ErrorState({ error, onRetry, busy, compact = false }) {
   return (
-    <div className="rounded-[28px] border border-red-500/30 bg-red-500/10 px-5 py-6">
+    <div className={compact ? 'rounded-[24px] border border-red-500/30 bg-red-500/10 px-4 py-5' : 'rounded-[28px] border border-red-500/30 bg-red-500/10 px-5 py-6'}>
       <div className="text-sm leading-7 text-red-200">{error}</div>
       <button
         type="button"
@@ -199,7 +206,10 @@ function ServiceColumn({ title, services }) {
                     filter: `drop-shadow(0 0 6px ${rowColor})`,
                   }}
                 />
-                <div className="truncate text-sm text-white">{service.name}</div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-white">{service.name}</div>
+                  {service.desc && <div className="truncate text-[11px] text-gray-500">{service.desc}</div>}
+                </div>
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
@@ -226,7 +236,7 @@ function ServiceColumn({ title, services }) {
   )
 }
 
-export default function SystemMonitor() {
+export default function SystemMonitor({ compact = false } = {}) {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -292,6 +302,10 @@ export default function SystemMonitor() {
   const cpuTone = getGaugeColor(cpuPercent)
   const memoryTone = getGaugeColor(memoryPercent)
   const diskTone = getGaugeColor(diskPercent)
+  const runningServicesCount = Array.isArray(stats?.services)
+    ? stats.services.filter((service) => service.running).length
+    : 0
+  const totalServicesCount = Array.isArray(stats?.services) ? stats.services.length : 0
   const loadAverageText = Number.isFinite(stats?.cpu?.loadAvg?.one)
     ? stats.cpu.loadAvg.one.toFixed(2)
     : '0.00'
@@ -301,24 +315,24 @@ export default function SystemMonitor() {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: 'easeOut' }}
-      className="space-y-5"
+      className={compact ? 'space-y-3' : 'space-y-5'}
     >
       {loading ? (
-        <LoadingState />
+        <LoadingState compact={compact} />
       ) : error && !stats ? (
-        <ErrorState error={error} onRetry={fetchStats} busy={refreshing} />
+        <ErrorState error={error} onRetry={fetchStats} busy={refreshing} compact={compact} />
       ) : (
         <>
           <section
-            className="rounded-[28px] border p-5 md:p-6"
+            className={compact ? 'rounded-[24px] border p-4 md:p-5' : 'rounded-[28px] border p-5 md:p-6'}
             style={{
               borderColor: 'rgba(0, 245, 255, 0.16)',
               background: 'linear-gradient(180deg, rgba(0, 245, 255, 0.05), rgba(0, 0, 0, 0.16))',
             }}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
-                <Activity className="h-4 w-4" />
+              <div className={compact ? 'inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-cyan-300' : 'inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300'}>
+                <Activity className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
                 效能概覽
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -335,20 +349,24 @@ export default function SystemMonitor() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className={compact ? 'mt-4 grid grid-cols-3 gap-3' : 'mt-5 grid gap-4 md:grid-cols-3'}>
               <GaugeCard
                 icon={Cpu}
                 label="CPU"
                 percent={cpuPercent}
-                valueText={`共 ${stats?.cpu?.count ?? '—'} 核心`}
+                valueText={compact ? `${stats?.cpu?.count ?? '—'} 核` : `共 ${stats?.cpu?.count ?? '—'} 核心`}
                 tone={cpuTone}
+                compact={compact}
               />
               <GaugeCard
                 icon={MemoryStick}
                 label="記憶體"
                 percent={memoryPercent}
-                valueText={`${formatBytes(stats?.memory?.active ?? stats?.memory?.used)} / ${formatBytes(stats?.memory?.total)}`}
+                valueText={compact
+                  ? `${formatBytes(stats?.memory?.active ?? stats?.memory?.used)} / ${formatBytes(stats?.memory?.total)}`
+                  : `${formatBytes(stats?.memory?.active ?? stats?.memory?.used)} / ${formatBytes(stats?.memory?.total)}`}
                 tone={memoryTone}
+                compact={compact}
               />
               <GaugeCard
                 icon={HardDrive}
@@ -356,50 +374,60 @@ export default function SystemMonitor() {
                 percent={diskPercent}
                 valueText={`${formatBytes(stats?.disk?.used)} / ${formatBytes(stats?.disk?.total)}`}
                 tone={diskTone}
+                compact={compact}
               />
             </div>
 
-            <div className="mt-5 grid gap-3 text-xs text-gray-400 sm:grid-cols-2">
+            <div className={compact ? 'mt-4 grid gap-2 text-[11px] text-gray-400 sm:grid-cols-3' : 'mt-5 grid gap-3 text-xs text-gray-400 sm:grid-cols-2'}>
               <div className="rounded-2xl border border-white/5 bg-black/15 px-4 py-3">
                 負載 1m: <span className="font-medium text-cyan-200">{loadAverageText}</span>
               </div>
               <div className="rounded-2xl border border-white/5 bg-black/15 px-4 py-3">
                 運行 <span className="font-medium text-cyan-200">{formatUptime(stats?.uptimeSec)}</span>
               </div>
+              {compact ? (
+                <div className="rounded-2xl border border-white/5 bg-black/15 px-4 py-3">
+                  服務 <span className="font-medium text-cyan-200">{runningServicesCount}/{totalServicesCount}</span>
+                </div>
+              ) : null}
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-white/10 bg-black/10 p-5 md:p-6">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
-              <Server className="h-4 w-4" />
-              服務狀態
-            </div>
+          {!compact ? (
+            <>
+              <section className="rounded-[28px] border border-white/10 bg-black/10 p-5 md:p-6">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
+                  <Server className="h-4 w-4" />
+                  服務狀態
+                </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              <ServiceColumn title="核心服務" services={coreServices} />
-              <ServiceColumn title="背景服務" services={backgroundServices} />
-            </div>
-          </section>
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <ServiceColumn title="核心服務" services={coreServices} />
+                  <ServiceColumn title="背景服務" services={backgroundServices} />
+                </div>
+              </section>
 
-          {Array.isArray(stats?.extraPorts) && stats.extraPorts.length > 0 ? (
-            <section className="rounded-[28px] border border-white/10 bg-black/10 p-5 md:p-6">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
-                <Zap className="h-4 w-4" />
-                其他監聽 PORT
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {stats.extraPorts.map((entry) => (
-                  <div
-                    key={`${entry.port}-${entry.pid || 'na'}`}
-                    className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100"
-                  >
-                    <span className="font-medium">:{entry.port}</span>
-                    <span className="text-cyan-50/80">{entry.process || '未知程序'}</span>
+              {Array.isArray(stats?.extraPorts) && stats.extraPorts.length > 0 ? (
+                <section className="rounded-[28px] border border-white/10 bg-black/10 p-5 md:p-6">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300">
+                    <Zap className="h-4 w-4" />
+                    其他監聽 PORT
                   </div>
-                ))}
-              </div>
-            </section>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {stats.extraPorts.map((entry) => (
+                      <div
+                        key={`${entry.port}-${entry.pid || 'na'}`}
+                        className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100"
+                      >
+                        <span className="font-medium">:{entry.port}</span>
+                        <span className="text-cyan-50/80">{entry.process || '未知程序'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </>
           ) : null}
 
           {error ? (
