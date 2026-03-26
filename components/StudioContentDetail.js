@@ -2,7 +2,17 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCheck, ClipboardList, Copy, ExternalLink, FileStack, LoaderCircle, Sparkles } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCheck,
+  ClipboardList,
+  Copy,
+  ExternalLink,
+  FileStack,
+  LoaderCircle,
+  MessageSquareText,
+  Sparkles,
+} from 'lucide-react'
 
 function readJsonResponse(response) {
   return response.text().then((text) => {
@@ -201,6 +211,8 @@ export default function StudioContentDetail({ contentItemId }) {
   const latestStoryboard = selectedVersion?.storyboard_json || {}
   const latestArtifacts = selectedVersion?.artifacts || {}
   const sceneCount = safeArray(latestStoryboard.scenes || latestStoryboard.scene_list).length
+  const copyScore = item.metadata?.copy_score || {}
+  const recommendationSnapshot = safeArray(item.metadata?.recommendation_snapshot).slice(0, 3)
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-6 lg:py-8">
@@ -347,6 +359,74 @@ export default function StudioContentDetail({ contentItemId }) {
                 <div className="text-xs uppercase tracking-[0.16em] text-gray-500">旁白骨幹</div>
                 <div className="mt-2 text-sm leading-7 text-gray-300 whitespace-pre-wrap">
                   {latestScript.narration_text || '—'}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="品質與推薦快照"
+              tone="#ffb703"
+              icon={Sparkles}
+              description="把這支內容目前的文案品質、複查狀態，以及系統當時給的推薦方向放在一起看。"
+            >
+              <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">目前狀態</div>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">文案分數</div>
+                    <div className="mt-2 text-2xl font-display text-white">
+                      {copyScore.total_score ?? '—'}
+                      {copyScore.max_score ? <span className="ml-1 text-sm text-gray-500">/ {copyScore.max_score}</span> : null}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">品質判定</div>
+                    <div className="mt-2 text-sm text-white">
+                      {item.metadata?.quality_passed ? '已通過，可直接往生成前進' : '未通過，建議先人工調整後再進 Sora'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">目前要修的點</div>
+                    <div className="mt-3 space-y-2">
+                      {safeArray(copyScore.fail_reasons).length ? (
+                        safeArray(copyScore.fail_reasons).map((reason) => (
+                          <div key={reason} className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-sm leading-6 text-amber-100">
+                            {reason}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-sm text-gray-400">目前沒有額外的 fail reason。</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">可延伸的題材建議</div>
+                    <div className="mt-3 space-y-3">
+                      {recommendationSnapshot.length ? (
+                        recommendationSnapshot.map((entry) => (
+                          <div key={entry.recommendation_id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-white">{entry.suggested_topic}</div>
+                                <div className="mt-1 text-xs text-gray-500">{entry.suggested_angle}</div>
+                              </div>
+                              <ToneTag tone="#39ff14">{Math.round(entry.priority_score || 0)}</ToneTag>
+                            </div>
+                            <div className="mt-2 text-sm leading-6 text-gray-300">{entry.reason}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-sm text-gray-400">目前沒有推薦快照。</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </SectionCard>
