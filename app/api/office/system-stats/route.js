@@ -8,18 +8,18 @@ export const dynamic = 'force-dynamic'
 
 // ─── 核心服務定義（label → 顯示名稱 + 預期 port）─────────────────────────
 const SERVICES = [
-  { label: 'ai.openclaw.gateway',           name: 'Gateway',          port: 18789, core: true },
-  { label: 'ai.openclaw.gpt-proxy',         name: 'GPT Proxy',        port: null,  core: true },
-  { label: 'ai.openclaw.copilot-tunnel',    name: 'Copilot Tunnel',   port: null,  core: true },
-  { label: 'ai.openclaw.office',            name: 'Office UI',        port: 4300,  core: true },
-  { label: 'ai.openclaw.n8n',               name: 'n8n',              port: 5678,  core: false },
-  { label: 'ai.openclaw.merchant-copilot-worker', name: 'Merchant Worker', port: null, core: false },
-  { label: 'com.bw.openclaw-control-center','name': 'Control Center', port: null,  core: false },
-  { label: 'com.bw.opencli-daemon',         name: 'OpenCLI Daemon',   port: null,  core: false },
-  { label: 'com.bw.opencli-bridge-chrome',  name: 'Chrome Bridge',    port: null,  core: false },
-  { label: 'com.bwstudio.studio-booking-form-pull', name: 'Studio Form Pull', port: null, core: false },
-  { label: 'homebrew.mxcl.colima',          name: 'Colima (Docker)',  port: null,  core: false },
-  { label: 'homebrew.mxcl.cliproxyapi',     name: 'CLI Proxy API',    port: null,  core: false },
+  { label: 'ai.openclaw.gateway',           name: 'Gateway',          port: 18789, core: true,  desc: 'OpenClaw 核心閘道' },
+  { label: 'ai.openclaw.gpt-proxy',         name: 'GPT Proxy',        port: null,  core: true,  desc: 'LLM 代理轉發' },
+  { label: 'ai.openclaw.copilot-tunnel',    name: 'Copilot Tunnel',   port: null,  core: true,  desc: 'Cloudflare Tunnel 對外' },
+  { label: 'ai.openclaw.office',            name: 'Office UI',        port: 4300,  core: true,  desc: '老闆入口介面' },
+  { label: 'homebrew.mxcl.cliproxyapi',     name: 'CLI Proxy API',    port: null,  core: true,  desc: 'GPT Proxy 上游 API' },
+  { label: 'ai.openclaw.n8n',               name: 'n8n',              port: 5678,  core: false, desc: '自動化排程引擎' },
+  { label: 'ai.openclaw.merchant-copilot-worker', name: 'Merchant Worker', port: null, core: false, desc: '商家 Copilot 背景' },
+  { label: 'com.bw.openclaw-control-center', name: 'Control Center', port: null,  core: false, desc: 'OpenClaw 控制台' },
+  { label: 'com.bw.opencli-daemon',         name: 'OpenCLI Daemon',   port: null,  core: false, desc: 'CLI 背景服務' },
+  { label: 'com.bw.opencli-bridge-chrome',  name: 'Chrome Bridge',    port: null,  core: false, desc: '瀏覽器自動化橋接' },
+  { label: 'com.bwstudio.studio-booking-form-pull', name: 'Studio Form Pull', port: null, core: false, desc: '攝影棚表單同步' },
+  { label: 'homebrew.mxcl.colima',          name: 'Colima (Docker)',  port: null,  core: false, desc: '容器引擎' },
 ]
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -134,6 +134,7 @@ export async function GET(request) {
       return {
         label:   svc.label,
         name:    svc.name,
+        desc:    svc.desc,
         port:    svc.port,
         core:    svc.core,
         running,

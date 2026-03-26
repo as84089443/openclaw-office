@@ -1180,9 +1180,9 @@ export default function BossInboxDashboard() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.22em] text-cyan-300">老闆收件匣</div>
-            <h2 className="mt-2 font-display text-3xl text-white">只留下你真的要看的事</h2>
+            <h2 className="mt-2 font-display text-3xl text-white">待拍板・待跟進・風險與機會</h2>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-gray-400">
-              這裡只看待拍板、待跟進、風險與機會，其他系統細節都盡量退到後面。
+              系統細節退到後面，這裡只看需要你決定的事。
             </p>
           </div>
           <button

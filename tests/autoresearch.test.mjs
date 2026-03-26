@@ -116,6 +116,87 @@ writeFileSync(
 )
 
 writeFileSync(
+  join(strategyDir, 'manual-20260325-0900-plan.json'),
+  JSON.stringify({
+    generatedAt: '2026-03-25T00:48:00.000Z',
+    selectedLaneId: 'optimizer',
+    selectedLaneLabel: '最佳化與學習率',
+    selectedLaneGoal: '先從 learning rate 比例、weight decay 與 optimizer 係數找低風險改善。',
+    selectedLaneWhyNow: '研究記憶顯示這條線近期最容易穩定改善。',
+    selectedLaneFocus: ['weight decay', 'matrix lr / unembedding lr 比例'],
+    selectedLaneAvoid: ['一次同時大改模型架構'],
+    nextLaneId: 'schedule',
+    nextLaneLabel: '訓練節奏與收尾排程',
+    nextLaneGoal: '調 warmup、warmdown、anneal 與訓練節奏。',
+    planSummary: '這輪先跑最佳化與學習率，先找低風險改善。',
+    stableMemoryCallout: '最近最穩的是「最佳化與學習率」：Lower weight decay。',
+    searchSpacePath: join(strategyDir, 'search-space.json'),
+    researchMemoryPath: join(strategyDir, 'research-memory.json'),
+    searchSpace: {
+      allowedFiles: ['train.py', 'results.tsv'],
+    },
+  }, null, 2),
+)
+
+writeFileSync(
+  join(strategyDir, 'search-space.json'),
+  JSON.stringify({
+    version: 1,
+    updatedAt: '2026-03-25T00:41:00.000Z',
+    goalMetric: 'val_bpb',
+    fixedBudgetMinutes: 5,
+    allowedFiles: ['train.py', 'results.tsv'],
+    lanes: [
+      { id: 'optimizer', label: '最佳化與學習率', goal: '先從 learning rate 比例、weight decay 與 optimizer 係數找低風險改善。' },
+      { id: 'schedule', label: '訓練節奏與收尾排程', goal: '調 warmup、warmdown、anneal 與訓練節奏。' },
+    ],
+    orchestration: {
+      planner: 'dev-fish-strategy-planner',
+      executor: 'dev-fish',
+      revalidator: 'qa',
+      distiller: 'memory-distiller',
+    },
+  }, null, 2),
+)
+
+writeFileSync(
+  join(strategyDir, 'research-memory.json'),
+  JSON.stringify({
+    version: 1,
+    updatedAt: '2026-03-25T00:52:00.000Z',
+    entries: [
+      {
+        runTag: 'manual-20260325-0900',
+        laneId: 'optimizer',
+        laneLabel: '最佳化與學習率',
+        qaStatus: 'PASS',
+        revalidationVerdict: 'stable',
+        validatedImprovement: 0.11,
+      },
+    ],
+    laneStats: {
+      optimizer: {
+        runs: 1,
+        passes: 1,
+        stablePasses: 1,
+        needsWorkRuns: 0,
+        blockedRuns: 0,
+        avgImprovement: 0.11,
+      },
+    },
+    recommendedPatterns: [
+      {
+        laneId: 'optimizer',
+        label: '最佳化與學習率',
+        summary: '近 1 輪在「最佳化與學習率」最穩，平均改善 0.110000。',
+        confidence: 0.55,
+      },
+    ],
+    avoidPatterns: [],
+  }, null, 2),
+)
+
+writeFileSync(
   join(projectDir, 'results.tsv'),
   [
     'commit\tval_bpb\tmemory_gb\tstatus\tdescription',
@@ -178,6 +259,24 @@ writeFileSync(
   ].join('\n'),
 )
 writeFileSync(
+  join(codexRunDir, 'revalidation.md'),
+  [
+    '# AutoResearch MLX Revalidation',
+    '- Revalidation verdict: `stable`',
+    '- Mean val_bpb: `1.305000`',
+    '- val_bpb spread: `0.006000`',
+  ].join('\n'),
+)
+writeFileSync(
+  join(codexRunDir, 'revalidation.json'),
+  JSON.stringify({
+    verdict: 'stable',
+    meanValBpb: 1.305,
+    valSpread: 0.006,
+    meanMemoryGb: 33.4,
+  }, null, 2),
+)
+writeFileSync(
   join(codexRunDir, 'memory-distiller-handoff.md'),
   [
     '# AutoResearch MLX Memory Distiller Handoff',
@@ -230,11 +329,17 @@ test('autoresearch GET returns snapshot with live, strategy, metrics, and artifa
   assert.equal(payload.control.status, 'running')
   assert.equal(payload.strategy.primaryModel, 'gpt-5.3-codex')
   assert.equal(payload.strategy.breakthroughModel, 'gpt-5.4')
+  assert.equal(payload.strategy.currentLane.label, '最佳化與學習率')
+  assert.equal(payload.strategy.nextLane.label, '訓練節奏與收尾排程')
+  assert.equal(payload.strategy.searchSpace.allowedFiles[0], 'train.py')
+  assert.equal(payload.strategy.researchMemory.entryCount, 1)
   assert.ok(Array.isArray(payload.strategy.availableModels))
   assert.equal(payload.metrics.bestKeepValBpb, 1.31)
+  assert.equal(payload.metrics.revalidationVerdict, 'stable')
   assert.equal(payload.highlights.qaVerdict, 'pass')
   assert.equal(payload.repo.projectDir, projectDir)
   assert.equal(payload.artifacts.codexRun.manifest.runTag, 'manual-20260325-0900')
+  assert.equal(payload.artifacts.revalidationReport.path, join(codexRunDir, 'revalidation.md'))
 })
 
 test('autoresearch PATCH updates schedule, strategy, and manual control config', async () => {
@@ -272,4 +377,3 @@ test('autoresearch PATCH updates schedule, strategy, and manual control config',
   assert.equal(strategyConfig.primaryModel, 'gpt-5.4')
   assert.equal(manualConfig.hardMinutes, 180)
 })
-
