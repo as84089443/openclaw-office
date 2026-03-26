@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -356,7 +357,10 @@ export default function StudioWorkspaceDashboard() {
       setSelectedContentItemId('')
       return
     }
-    const response = await fetch(`/api/studio/versions?contentItemId=${encodeURIComponent(contentItemId)}`, { cache: 'no-store' })
+    const response = await fetch(
+      `/api/studio/versions?contentItemId=${encodeURIComponent(contentItemId)}&latestOnly=1&summary=1`,
+      { cache: 'no-store' }
+    )
     const data = await readJsonResponse(response)
     if (!response.ok || data.error) throw new Error(data.error || '無法載入腳本版本')
     setSelectedContentItemId(contentItemId)
@@ -816,6 +820,14 @@ export default function StudioWorkspaceDashboard() {
                             <ClipboardList className="h-4 w-4" />
                             重做這支
                           </ActionButton>
+                          <Link
+                            href={`/studio/content/${encodeURIComponent(item.content_item_id)}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-gray-300 transition hover:-translate-y-0.5 hover:text-white"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            查看詳情
+                          </Link>
                           {item.metadata?.quality_passed === false ? (
                             <ToneTag tone="#ffb703">
                               失敗場景：{safeArray(item.metadata?.failed_scene_ids).join(', ') || '待確認'}
@@ -870,16 +882,25 @@ export default function StudioWorkspaceDashboard() {
                             <div className="text-xs uppercase tracking-[0.16em] text-gray-500">最新版本</div>
                             <div className="mt-1 text-sm font-semibold text-white">{latestVersion.version_label}</div>
                           </div>
-                          <ToneTag tone="#00f5ff">{latestVersion.script_json?.variant || 'A'}</ToneTag>
+                          <div className="flex items-center gap-2">
+                            <ToneTag tone="#00f5ff">{latestVersion.summary?.variant || 'A'}</ToneTag>
+                            <Link
+                              href={`/studio/content/${encodeURIComponent(selectedContentItem.content_item_id)}`}
+                              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-gray-300 transition hover:-translate-y-0.5 hover:text-white"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              詳情頁
+                            </Link>
+                          </div>
                         </div>
                         <div className="mt-4 grid gap-4 md:grid-cols-2">
                           <div>
                             <div className="text-xs uppercase tracking-[0.16em] text-gray-500">標題</div>
-                            <div className="mt-2 text-sm leading-7 text-white">{latestVersion.script_json?.title || '—'}</div>
+                            <div className="mt-2 text-sm leading-7 text-white">{latestVersion.summary?.title || '—'}</div>
                           </div>
                           <div>
                             <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Hook</div>
-                            <div className="mt-2 text-sm leading-7 text-gray-300">{latestVersion.script_json?.hook || '—'}</div>
+                            <div className="mt-2 text-sm leading-7 text-gray-300">{latestVersion.summary?.hook || '—'}</div>
                           </div>
                         </div>
                       </div>
