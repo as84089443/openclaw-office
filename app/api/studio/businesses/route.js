@@ -82,6 +82,21 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  let body
+  try { body = await request.json() } catch { body = {} }
+
+  if (body._internal_sync) {
+    try {
+      const { _internal_sync, ...payload } = body
+      return Response.json(await runStudioAction('studio_upsert_business', payload))
+    } catch (error) {
+      if (error instanceof StudioFactoryError && error.payload) {
+        return Response.json(error.payload, { status: error.statusCode || 500 })
+      }
+      return Response.json({ error: error.message || 'Sync failed' }, { status: 500 })
+    }
+  }
+
   if (CONTENTSTUDIO_URL) {
     return Response.json(
       { error: '請到 ContentStudio 管理商家', redirect: `${CONTENTSTUDIO_URL}/brand` },
@@ -99,7 +114,6 @@ export async function POST(request) {
   }
 
   try {
-    const body = await request.json()
     return Response.json(await runStudioAction('studio_upsert_business', body))
   } catch (error) {
     if (error instanceof StudioFactoryError && error.payload) {
