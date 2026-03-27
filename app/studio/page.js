@@ -1,10 +1,10 @@
-import StudioWorkspaceDashboard from '../../components/StudioWorkspaceDashboard'
+import StudioContentBoard from '../../components/StudioContentBoard'
 
 export const metadata = {
-  title: '內容策劃中台 | BW Copilot',
-  description: '整理商家內容庫、下一支短影音建議、腳本與 Sora 半自動工作包。',
+  title: '內容看板 | BW Copilot Studio',
+  description: '瀏覽商家的內容資料庫、系統推薦、腳本版本。',
 }
 
 export default function StudioPage() {
-  return <StudioWorkspaceDashboard />
+  return <StudioContentBoard />
 }

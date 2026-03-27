@@ -92,6 +92,16 @@ function safeArray(value) {
   return Array.isArray(value) ? value : []
 }
 
+function pickSceneCardText(scene) {
+  if (!scene || typeof scene !== 'object') return '—'
+  if (typeof scene.scene_card_text === 'string' && scene.scene_card_text.trim()) return scene.scene_card_text.trim()
+  if (typeof scene.visual_description === 'string' && scene.visual_description.trim()) return scene.visual_description.trim()
+  if (typeof scene.visual_goal === 'string' && scene.visual_goal.trim()) return scene.visual_goal.trim()
+  if (typeof scene.subtitle_text?.['zh-TW'] === 'string' && scene.subtitle_text['zh-TW'].trim()) return scene.subtitle_text['zh-TW'].trim()
+  if (typeof scene.director_prompt === 'string' && scene.director_prompt.trim()) return scene.director_prompt.trim()
+  return '—'
+}
+
 function SectionCard({ title, tone, icon: Icon, description = '', children, actions = null }) {
   return (
     <div className="glass-card rounded-[28px] p-6" style={{ borderColor: `${tone}44` }}>
@@ -210,7 +220,8 @@ export default function StudioContentDetail({ contentItemId }) {
   const latestScript = selectedVersion?.script_json || {}
   const latestStoryboard = selectedVersion?.storyboard_json || {}
   const latestArtifacts = selectedVersion?.artifacts || {}
-  const sceneCount = safeArray(latestStoryboard.scenes || latestStoryboard.scene_list).length
+  const storyboardScenes = safeArray(latestStoryboard.scenes || latestStoryboard.scene_list)
+  const sceneCount = storyboardScenes.length
   const copyScore = item.metadata?.copy_score || {}
   const recommendationSnapshot = safeArray(item.metadata?.recommendation_snapshot).slice(0, 3)
 
@@ -453,6 +464,72 @@ export default function StudioContentDetail({ contentItemId }) {
                 <ArtifactRow label="Scene pack" value={latestArtifacts.sora_scene_entry_pack_path} onCopy={copyText} />
                 <ArtifactRow label="Sora master plan" value={latestArtifacts.sora_master_plan_path} onCopy={copyText} />
                 <ArtifactRow label="Upload template" value={latestArtifacts.upload_manifest_template_path} onCopy={copyText} />
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Sora 手動操作面板"
+              tone="#9d4edd"
+              icon={ClipboardList}
+              description="這裡直接把每個 scene 的時長和建議貼出來，讓你可以一格一格帶進 Sora Storyboard。"
+              actions={
+                <ActionButton
+                  tone="#9d4edd"
+                  variant="ghost"
+                  onClick={() =>
+                    copyText(
+                      storyboardScenes
+                        .map((scene, index) => {
+                          const duration = scene.duration_seconds ?? scene.duration ?? '—'
+                          return `Scene ${index + 1}｜${duration}s\n${pickSceneCardText(scene)}`
+                        })
+                        .join('\n\n')
+                    )
+                  }
+                  disabled={!storyboardScenes.length}
+                >
+                  <Copy className="h-4 w-4" />
+                  複製全部 scene
+                </ActionButton>
+              }
+            >
+              <div className="grid gap-3">
+                {storyboardScenes.length ? (
+                  storyboardScenes.map((scene, index) => {
+                    const duration = scene.duration_seconds ?? scene.duration ?? '—'
+                    const sceneCardText = pickSceneCardText(scene)
+                    return (
+                      <div key={scene.scene_id || `${index}`} className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-semibold text-white">
+                                Scene {index + 1}
+                                {scene.scene_id ? <span className="ml-2 text-xs text-gray-500">({scene.scene_id})</span> : null}
+                              </div>
+                              <ToneTag tone="#9d4edd">{duration}s</ToneTag>
+                              {scene.render_scene_type ? <ToneTag tone="#00f5ff">{scene.render_scene_type}</ToneTag> : null}
+                            </div>
+                            {scene.scene_objective ? (
+                              <div className="mt-2 text-xs text-gray-500">目標：{scene.scene_objective}</div>
+                            ) : null}
+                          </div>
+                          <ActionButton tone="#00f5ff" variant="ghost" onClick={() => copyText(sceneCardText)} disabled={sceneCardText === '—'}>
+                            <Copy className="h-4 w-4" />
+                            複製
+                          </ActionButton>
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-7 text-gray-300 whitespace-pre-wrap">
+                          {sceneCardText}
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-black/10 px-4 py-5 text-sm text-gray-400">
+                    目前這個版本還沒有 scene 資料。
+                  </div>
+                )}
               </div>
             </SectionCard>
           </div>

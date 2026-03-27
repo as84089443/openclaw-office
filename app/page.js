@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FlaskConical,
   MessageCircleMore,
+  PenLine,
   ShieldCheck,
   Sparkles,
   Store,
@@ -45,7 +46,16 @@ const primaryEntries = [
     icon: Sparkles,
     tag: '內容',
   },
+  {
+    href: '/writer',
+    title: 'AI 自動筆',
+    hint: 'GPT-5.4 產文、佇列、發布',
+    accent: '#ff6b35',
+    icon: PenLine,
+    tag: '產文',
+  },
 ]
+
 
 const utilityEntries = [
   {
