@@ -5,23 +5,22 @@ import { usePathname } from 'next/navigation'
 import { BookOpen, ClipboardList, Building2 } from 'lucide-react'
 
 const tabs = [
-  { href: '/studio', label: '內容看板', icon: BookOpen, exact: true },
-  { href: '/studio/plan', label: '新建工作包', icon: ClipboardList, exact: false },
-  { href: '/studio/businesses', label: '商家管理', icon: Building2, exact: false },
+  { href: '/studio', label: '內容看板', icon: BookOpen, match: (p) => p === '/studio' || p.startsWith('/studio/content') },
+  { href: '/studio/plan', label: '新建工作包', icon: ClipboardList, match: (p) => p.startsWith('/studio/plan') },
+  { href: '/studio/businesses', label: '商家管理', icon: Building2, match: (p) => p.startsWith('/studio/businesses') },
 ]
 
 export default function StudioLayout({ children }) {
   const pathname = usePathname()
 
   function isActive(tab) {
-    if (tab.exact) return pathname === tab.href
-    return pathname.startsWith(tab.href)
+    return tab.match(pathname)
   }
 
   return (
     <div className="min-h-screen">
       {/* Studio sub-nav */}
-      <div className="sticky top-[72px] z-40 border-b border-white/8 bg-[#07090e]/80 backdrop-blur-xl md:top-[72px]">
+      <div className="sticky top-16 z-40 border-b border-white/8 bg-[#07090e]/80 backdrop-blur-xl md:top-[72px]">
         <div className="mx-auto max-w-7xl px-4">
           <nav className="flex gap-1 overflow-x-auto py-2 scrollbar-none">
             {tabs.map((tab) => {

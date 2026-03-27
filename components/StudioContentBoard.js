@@ -104,6 +104,10 @@ export default function StudioContentBoard() {
 
   const latestVersion = useMemo(() => scriptVersions[0] || null, [scriptVersions])
 
+  const buildPlanHref = useCallback((topic = '', angle = '') => (
+    `/studio/plan?topic=${encodeURIComponent(topic || '')}&angle=${encodeURIComponent(angle || '')}&business_id=${selectedBusinessId || ''}`
+  ), [selectedBusinessId])
+
   const filteredItems = useMemo(() => {
     const kw = contentSearch.trim().toLowerCase()
     return contentItems.filter((item) => {
@@ -188,7 +192,7 @@ export default function StudioContentBoard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/studio/plan"
+              href={buildPlanHref()}
               className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:-translate-y-0.5"
             >
               <Plus className="h-4 w-4" />
@@ -297,7 +301,7 @@ export default function StudioContentBoard() {
                       <div className="mt-1 text-xs text-cyan-400">{item.suggested_angle}</div>
                       <div className="mt-2 text-xs leading-5 text-gray-500">{item.reason}</div>
                       <Link
-                        href={`/studio/plan?topic=${encodeURIComponent(item.suggested_topic || '')}&angle=${encodeURIComponent(item.suggested_angle || '')}&business=${selectedBusinessId}`}
+                        href={buildPlanHref(item.suggested_topic, item.suggested_angle)}
                         className="mt-3 inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300"
                       >
                         <Sparkles className="h-3 w-3" />
@@ -354,7 +358,7 @@ export default function StudioContentBoard() {
                   </div>
                   {contentItems.length === 0 ? (
                     <Link
-                      href="/studio/plan"
+                      href={buildPlanHref()}
                       className="mt-3 inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300"
                     >
                       <Plus className="h-4 w-4" />
@@ -441,7 +445,7 @@ export default function StudioContentBoard() {
                       完整詳情頁
                     </Link>
                     <Link
-                      href={`/studio/plan?topic=${encodeURIComponent(selectedContentItem.topic || '')}&angle=${encodeURIComponent(selectedContentItem.angle || '')}&business=${selectedBusinessId}`}
+                      href={buildPlanHref(selectedContentItem.topic, selectedContentItem.angle)}
                       className="ml-auto inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300"
                     >
                       <Sparkles className="h-3 w-3" />

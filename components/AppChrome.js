@@ -15,7 +15,7 @@ const DESKTOP_NAV_ITEMS = [
   { href: '/', label: '首頁', shortLabel: '首頁', icon: Home, match: (pathname) => pathname === '/' },
   { href: '/ops', label: '營運總覽', shortLabel: '營運', icon: ShieldCheck },
   { href: '/office', label: '老闆收件匣', shortLabel: '老闆', icon: Building2 },
-  { href: '/studio', label: '內容策劃中台', shortLabel: '策劃', icon: Sparkles },
+  { href: '/studio', label: '策劃工作台', shortLabel: '策劃', icon: Sparkles },
   { href: '/browser', label: '瀏覽器工具', shortLabel: '瀏覽器', icon: TerminalSquare },
   { href: '/research', label: '研究控制台', shortLabel: '研究', icon: FlaskConical },
 ]

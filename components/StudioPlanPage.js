@@ -68,6 +68,7 @@ function ArtifactRow({ label, value, onCopy, tone = '#00f5ff' }) {
 
 export default function StudioPlanPage() {
   const searchParams = useSearchParams()
+  const urlBusinessId = searchParams?.get('business_id') || ''
 
   const {
     businesses,
@@ -104,6 +105,13 @@ export default function StudioPlanPage() {
       }))
     }
   }, [selectedBusiness])
+
+  useEffect(() => {
+    if (urlBusinessId && businesses.length > 0) {
+      const match = businesses.find((b) => b.business_id === urlBusinessId)
+      if (match) selectBusiness(urlBusinessId)
+    }
+  }, [urlBusinessId, businesses]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const copyText = useCallback(async (value) => {
     if (!value) return
