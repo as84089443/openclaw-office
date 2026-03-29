@@ -17,7 +17,7 @@ if [[ ! -x "$NPM_BIN" ]]; then
   NPM_BIN="/opt/homebrew/bin/npm"
 fi
 
-export PATH="$(dirname "$NODE_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/Users/brian/.local/bin:/Users/brian/.npm-global/bin:$PATH"
+export PATH="$(dirname "$NODE_BIN"):/Users/brian/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/Users/brian/.local/bin:/Users/brian/.npm-global/bin:$PATH"
 export NODE_ENV=production
 
 cd "$PROJECT_ROOT"
