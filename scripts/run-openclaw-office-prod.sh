@@ -29,6 +29,35 @@ ensure_native_runtime() {
   fi
 }
 
+ensure_build_runtime() {
+  local build_id_path="$PROJECT_ROOT/.next/BUILD_ID"
+  local required_paths=(
+    "$PROJECT_ROOT/.next/server/app/research/page.js"
+    "$PROJECT_ROOT/.next/server/app/api/autoresearch/route.js"
+    "$PROJECT_ROOT/.next/server/app/writer/page.js"
+  )
+
+  if [[ ! -f "$build_id_path" ]]; then
+    echo "[openclaw-office] 找不到 production build，先重建..."
+    "$NPM_BIN" run build
+    return
+  fi
+
+  local missing=0
+  local path
+  for path in "${required_paths[@]}"; do
+    if [[ ! -f "$path" ]]; then
+      echo "[openclaw-office] 缺少 build 產物：$path"
+      missing=1
+    fi
+  done
+
+  if [[ "$missing" -eq 1 ]]; then
+    echo "[openclaw-office] production build 不完整，先重建..."
+    "$NPM_BIN" run build
+  fi
+}
+
 resolve_port() {
   if [[ -n "${PORT:-}" ]]; then
     printf '%s\n' "$PORT"
@@ -67,10 +96,7 @@ if [[ "${OPENCLAW_FORCE_LOCAL:-0}" != "1" ]]; then
   fi
 fi
 
-if [[ ! -f ".next/BUILD_ID" ]]; then
-  "$NPM_BIN" run build
-fi
-
 ensure_native_runtime
+ensure_build_runtime
 
 exec "$NODE_BIN" start.js

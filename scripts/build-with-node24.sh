@@ -19,4 +19,5 @@ fi
 export PATH="$(dirname "$NODE_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:$PATH"
 
 cd "$PROJECT_ROOT"
+"$NODE_BIN" "$NPM_CLI" run rebuild:native
 exec "$NODE_BIN" "$NPM_CLI" run build:raw
