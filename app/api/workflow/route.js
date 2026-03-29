@@ -244,9 +244,32 @@ function needsRootCauseFollowup({ success = true, body = {}, task = null } = {})
   return /(待查|待釐清|待確認|需要調查|需要驗證|需要複盤|追根究底|根因|再跑一次|替代方案)/.test(followupSignal)
 }
 
+function buildBoundAgentSessionKey(agentId) {
+  const resolvedAgentId = String(agentId || 'main').trim() || 'main'
+  const bindings = Array.isArray(AGENTS[resolvedAgentId]?.bindings)
+    ? AGENTS[resolvedAgentId].bindings
+    : []
+
+  for (const binding of bindings) {
+    const raw = String(binding || '').trim()
+    if (!raw) continue
+    const [channelPart, peerPart] = raw.split(/\s+/, 2)
+    if (!channelPart || !peerPart) continue
+    const channel = String(channelPart).trim()
+    const colonIndex = peerPart.indexOf(':')
+    if (colonIndex <= 0 || colonIndex === peerPart.length - 1) continue
+    const peerKind = peerPart.slice(0, colonIndex).trim()
+    const peerId = peerPart.slice(colonIndex + 1).trim()
+    if (!channel || !peerKind || !peerId) continue
+    return `agent:${resolvedAgentId}:${channel}:${peerKind}:${peerId}`
+  }
+
+  throw new Error(`Agent ${resolvedAgentId} has no valid channel binding for workflow dispatch`)
+}
+
 function buildTaskSessionKey(task) {
-  const agentId = String(task?.assignedAgent || 'wickedman').trim() || 'wickedman'
-  return `office-task:${task?.id || 'unknown'}:${agentId}`
+  const agentId = String(task?.assignedAgent || 'main').trim() || 'main'
+  return buildBoundAgentSessionKey(agentId)
 }
 
 function buildTaskDispatchMessage(task, { continuation = false } = {}) {
@@ -293,7 +316,8 @@ function buildTaskDispatchMessage(task, { continuation = false } = {}) {
 }
 
 function buildSidecarSessionKey(task, sidecarAgentId) {
-  return `office-sidecar:${task?.id || 'unknown'}:${String(sidecarAgentId || 'unknown').trim() || 'unknown'}`
+  const resolvedAgentId = String(sidecarAgentId || 'unknown').trim() || 'unknown'
+  return buildBoundAgentSessionKey(resolvedAgentId)
 }
 
 function buildSidecarDispatchMessage(task, sidecarAgentId, { reason = 'continuation-review' } = {}) {
@@ -415,7 +439,7 @@ async function dispatchSidecarReviewers(task, { reason = 'continuation-review', 
       const accepted = await gatewayCall(
         'chat.send',
         {
-          sessionKey: `agent:${sidecarAgentId}:${sessionKey}`,
+          sessionKey,
           message,
           deliver: false,
           idempotencyKey,
@@ -723,7 +747,7 @@ async function dispatchTaskToAgent(task, { continuation = false, now = Date.now(
   const accepted = await gatewayCall(
     'chat.send',
     {
-      sessionKey: `agent:${task.assignedAgent}:${sessionKey}`,
+      sessionKey,
       message,
       deliver: false,
       idempotencyKey,
