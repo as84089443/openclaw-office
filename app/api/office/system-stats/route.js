@@ -11,11 +11,14 @@ const SERVICES = [
   { label: 'ai.openclaw.gateway',           name: 'Gateway',          port: 18789, core: true,  desc: 'OpenClaw 核心閘道' },
   { label: 'ai.openclaw.gpt-proxy',         name: 'GPT Proxy',        port: null,  core: true,  desc: 'LLM 代理轉發' },
   { label: 'ai.openclaw.copilot-tunnel',    name: 'Copilot Tunnel',   port: null,  core: true,  desc: 'Cloudflare Tunnel 對外' },
-  { label: 'ai.openclaw.office',            name: 'Office UI',        port: 4300,  core: true,  desc: '老闆入口介面' },
+  { label: 'ai.openclaw.gpt-proxy-tunnel',  name: 'GPT Proxy Tunnel', port: null,  core: false, desc: 'GPT Proxy 外部通道' },
+  { label: 'ai.openclaw.office',            name: 'Office UI',        port: 4201,  core: true,  desc: '老闆入口介面' },
+  { label: 'ai.openclaw.chatgpt-codex-bridge', name: 'ChatGPT Codex Bridge', port: 4318, core: false, desc: 'ChatGPT ↔ Codex MCP bridge' },
   { label: 'homebrew.mxcl.cliproxyapi',     name: 'CLI Proxy API',    port: null,  core: true,  desc: 'GPT Proxy 上游 API' },
   { label: 'ai.openclaw.n8n',               name: 'n8n',              port: 5678,  core: false, desc: '自動化排程引擎' },
   { label: 'ai.openclaw.merchant-copilot-worker', name: 'Merchant Worker', port: null, core: false, desc: '商家 Copilot 背景' },
   { label: 'com.bw.openclaw-control-center', name: 'Control Center', port: null,  core: false, desc: 'OpenClaw 控制台' },
+  { label: 'com.openclaw.dashboard',        name: 'Dashboard',        port: null,  core: false, desc: 'OpenClaw 桌面儀表板' },
   { label: 'com.bw.opencli-daemon',         name: 'OpenCLI Daemon',   port: null,  core: false, desc: 'CLI 背景服務' },
   { label: 'com.bw.opencli-bridge-chrome',  name: 'Chrome Bridge',    port: null,  core: false, desc: '瀏覽器自動化橋接' },
   { label: 'com.bwstudio.studio-booking-form-pull', name: 'Studio Form Pull', port: null, core: false, desc: '攝影棚表單同步' },
@@ -129,8 +132,10 @@ export async function GET(request) {
 
     // 組服務狀態
     const services = SERVICES.map((svc) => {
-      const running = serviceIsLoaded(svc.label)
+      const loaded = serviceIsLoaded(svc.label)
       const portInfo = svc.port ? listeningPorts[svc.port] : null
+      const portOpen = svc.port ? Boolean(portInfo) : null
+      const running = loaded || Boolean(portOpen)
       return {
         label:   svc.label,
         name:    svc.name,
@@ -138,7 +143,8 @@ export async function GET(request) {
         port:    svc.port,
         core:    svc.core,
         running,
-        portOpen: svc.port ? Boolean(portInfo) : null,
+        loaded,
+        portOpen,
         pid:     portInfo?.pid ?? null,
       }
     })
