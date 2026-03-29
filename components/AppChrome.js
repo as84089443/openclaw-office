@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import {
   Building2,
@@ -131,7 +132,17 @@ function MobileDock({ pathname }) {
 }
 
 export default function AppChrome({ children }) {
-  const pathname = usePathname()
+  const routerPathname = usePathname()
+  const [pathname, setPathname] = useState(routerPathname)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location?.pathname) {
+      setPathname(window.location.pathname)
+      return
+    }
+    setPathname(routerPathname)
+  }, [routerPathname])
+
   const isMerchantSurface = pathname?.startsWith('/merchant')
 
   if (isMerchantSurface) {
