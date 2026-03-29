@@ -1,8 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, BriefcaseBusiness, Clock3, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bot, BrainCircuit, BriefcaseBusiness, Bug, Clock3, GitBranchPlus, Orbit, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
 
 const TYPE_META = {
   decision: { label: '待拍板', color: '#f59e0b', icon: Clock3 },
@@ -46,6 +47,17 @@ const WORKFLOW_STATUS_LABEL = {
   rolled_back: '已還原',
 }
 
+const WORKFLOW_PHASE_LABEL = {
+  queued: '待派工',
+  running: '執行中',
+  waiting_reviewer: '等 Reviewer',
+  awaiting_continuation: '等續跑',
+  waiting_human_gate: '等老闆拍板',
+  completed: '已完成',
+  failed: '未完成',
+  superseded: '已被取代',
+}
+
 const REVIEW_STATUS_LABEL = {
   pending: '待確認',
   approved: '已同意',
@@ -80,6 +92,77 @@ const DELIVERY_STATUS_LABEL = {
   delivered: '已送達',
   success: '已送達',
   failed: '送達失敗',
+}
+
+const BRAIN_MODE_LABEL = {
+  queued: '待接手',
+  execution: '執行中',
+  review: '待驗收',
+  blocked: '卡住',
+}
+
+const DELEGATION_STATUS_LABEL = {
+  queued: '已排隊',
+  running: '進行中',
+  idle: '待命',
+  blocked: '已卡住',
+  dispatch_failed: '派送失敗',
+  awaiting_continuation: '等續跑',
+  'awaiting-continuation': '等續跑',
+}
+
+const SIDECAR_STATUS_LABEL = {
+  queued: '已排隊',
+  dispatched: '已派送',
+  running: '進行中',
+  dispatch_failed: '派送失敗',
+}
+
+const TASK_TYPE_LABEL = {
+  primary: '主任務',
+  sidecar_review: 'Sidecar Review',
+  worker_subtask: '子任務',
+  verifier: '驗證',
+  memory_distill: '記憶蒸餾',
+}
+
+const MERGE_POLICY_LABEL = {
+  advisory: '建議參考',
+  consensus_required: '需共識',
+  blocking_review: '可阻擋',
+  root_cause_support: '根因支援',
+}
+
+const RESOLUTION_SOURCE_LABEL = {
+  self: '自行收斂',
+  parent: '由主任務關閉',
+  dispatch_failed: '派送失敗',
+}
+
+const CONSENSUS_STATUS_LABEL = {
+  pending_review: '待 reviewer',
+  needs_more_review: '需更多 reviewer',
+  advisory_only: '僅 advisory',
+  clear: '已收斂',
+  blocked: '被 reviewer 擋下',
+  human_gate: '待人工核准',
+  conflict: '意見衝突',
+}
+
+const RISK_TIER_LABEL = {
+  low: '低風險',
+  medium: '中風險',
+  high: '高風險',
+  irreversible: '不可逆',
+}
+
+const RULE_STATUS_LABEL = {
+  draft: '草稿',
+  dry_run: 'Dry Run',
+  canary: 'Canary',
+  approved: '已核准',
+  auto_applied: '已自動套用',
+  rolled_back: '已回滾',
 }
 
 function toPriorityOrder(value) {
@@ -161,6 +244,51 @@ function formatAutonomyLabel(label, level) {
   return `第 ${level || 1} 階段`
 }
 
+function formatBrainMode(value) {
+  return formatStatusLabel(value, BRAIN_MODE_LABEL, '未設定')
+}
+
+function formatDelegationStatus(value) {
+  return formatStatusLabel(value, DELEGATION_STATUS_LABEL, '未設定')
+}
+
+function formatTaskType(value) {
+  return formatStatusLabel(value, TASK_TYPE_LABEL, '未分類')
+}
+
+function formatMergePolicy(value) {
+  return formatStatusLabel(value, MERGE_POLICY_LABEL, '未設定')
+}
+
+function formatResolutionSource(value) {
+  return formatStatusLabel(value, RESOLUTION_SOURCE_LABEL, '未設定')
+}
+
+function formatConsensusStatus(value) {
+  return formatStatusLabel(value, CONSENSUS_STATUS_LABEL, '未評估')
+}
+
+function formatRiskTier(value) {
+  return formatStatusLabel(value, RISK_TIER_LABEL, '未分級')
+}
+
+function formatRuleStatus(value) {
+  return formatStatusLabel(value, RULE_STATUS_LABEL, '草稿')
+}
+
+function formatRelativeTime(ts) {
+  if (!ts) return '—'
+  const deltaMs = Date.now() - Number(ts)
+  if (!Number.isFinite(deltaMs)) return '—'
+  const deltaMinutes = Math.round(deltaMs / 60000)
+  if (deltaMinutes <= 1) return '剛剛'
+  if (deltaMinutes < 60) return `${deltaMinutes} 分鐘前`
+  const deltaHours = Math.round(deltaMinutes / 60)
+  if (deltaHours < 24) return `${deltaHours} 小時前`
+  const deltaDays = Math.round(deltaHours / 24)
+  return `${deltaDays} 天前`
+}
+
 function formatHintActionScores(actionScores = []) {
   if (!Array.isArray(actionScores) || actionScores.length === 0) return []
   return actionScores
@@ -213,6 +341,392 @@ function CountCard({ label, value, color, Icon }) {
       </div>
       <div className="mt-3 text-3xl font-display" style={{ color }}>
         {value}
+      </div>
+    </div>
+  )
+}
+
+function LobsterMetricCard({ label, value, Icon, tone = 'cyan' }) {
+  const toneMap = {
+    cyan: 'border-cyan-500/20 bg-cyan-500/5 text-cyan-200',
+    amber: 'border-amber-500/20 bg-amber-500/5 text-amber-200',
+    rose: 'border-rose-500/20 bg-rose-500/5 text-rose-200',
+    emerald: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-200',
+  }
+  const style = toneMap[tone] || toneMap.cyan
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${style}`}>
+      <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em]">
+        <span>{label}</span>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="mt-3 font-display text-2xl text-white">{value}</div>
+    </div>
+  )
+}
+
+function LobsterTrackCard({ track }) {
+  const blockerLine = (track.blockers || []).filter(Boolean).join(' / ')
+  const openLoopLine = (track.openLoops || []).filter(Boolean).join(' / ')
+  const suggestedSubagents = (track.suggestedSubagents || []).filter(Boolean)
+  const childTasks = track.childTasks || []
+  const consensus = track.consensus || null
+  const reusableRule = track.reusableRule || null
+  const sidecarDispatchLine = (track.sidecarDispatches || [])
+    .map((dispatch) => `${dispatch.agentName}${dispatch.status ? ` (${formatStatusLabel(dispatch.status, SIDECAR_STATUS_LABEL, dispatch.status)})` : ''}`)
+    .join(' / ')
+  const showWorkflowPhase = Boolean(
+    track.workflowPhase
+    && !(
+      (track.workflowPhase === 'running' && track.status === 'in_progress')
+      || (track.workflowPhase === 'queued' && ['pending', 'assigned'].includes(track.status))
+      || (track.workflowPhase === 'completed' && track.status === 'completed')
+      || (track.workflowPhase === 'failed' && track.status === 'failed')
+    ),
+  )
+  return (
+    <div className={`rounded-2xl border p-4 ${track.staleMemory ? 'border-amber-500/20 bg-amber-500/5' : 'border-white/8 bg-black/20'}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-cyan-200">
+              {track.agentEmoji} {track.agentName}
+            </span>
+            <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-gray-300">
+              {formatBrainMode(track.brainMode)}
+            </span>
+            <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-gray-400">
+              {formatStatusLabel(track.status, WORKFLOW_STATUS_LABEL, '進行中')}
+            </span>
+            {showWorkflowPhase && (
+              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-100">
+                {formatStatusLabel(track.workflowPhase, WORKFLOW_PHASE_LABEL, track.workflowPhase)}
+              </span>
+            )}
+            <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-gray-300">
+              {formatRiskTier(track.riskTier)}
+            </span>
+            {consensus && (
+              <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-emerald-200">
+                {formatConsensusStatus(consensus.status)}
+              </span>
+            )}
+            {track.continuationRequired && (
+              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-200">
+                等續跑
+              </span>
+            )}
+          </div>
+          <div className="mt-3 font-display text-lg text-white">{track.title}</div>
+          {track.summary && (
+            <div className="mt-2 text-sm leading-7 text-gray-300">{track.summary}</div>
+          )}
+        </div>
+        <div className="text-xs text-gray-500">
+          記憶更新 {formatRelativeTime(track.updatedAt)} / {formatTime(track.updatedAt)}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">焦點</div>
+          <div className="mt-2 text-sm text-gray-200">{track.focus || '—'}</div>
+        </div>
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">下一檢查點</div>
+          <div className="mt-2 text-sm text-gray-200">{track.nextCheckpoint || track.nextStep || '—'}</div>
+        </div>
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">目前里程碑</div>
+          <div className="mt-2 text-sm text-gray-200">{track.milestone || '—'}</div>
+        </div>
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">委派狀態</div>
+          <div className="mt-2 text-sm text-gray-200">
+            {formatDelegationStatus(track.delegationStatus)}
+            {track.reviewerMode ? ` / ${track.reviewerMode}` : ''}
+          </div>
+        </div>
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">治理</div>
+          <div className="mt-2 text-sm text-gray-200">
+            Retry {track.retryCount || 0}/{track.retryBudget || 0}
+            {track.escalationLevel ? ` / Escalation L${track.escalationLevel}` : ''}
+          </div>
+        </div>
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">共識摘要</div>
+          <div className="mt-2 text-sm text-gray-200">
+            {consensus?.summary || '目前還沒有 reviewer / verifier 共識摘要。'}
+          </div>
+        </div>
+      </div>
+
+      {(track.rootCause || blockerLine || openLoopLine || track.nextHandoff || suggestedSubagents.length > 0 || sidecarDispatchLine || track.evolutionNote || track.humanGateReason || consensus?.recommendedAction || reusableRule) && (
+        <div className="mt-4 space-y-2 text-sm leading-7">
+          {track.humanGateReason && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-100">
+              <span className="mr-2 text-amber-300">人工 Gate</span>{track.humanGateReason}
+            </div>
+          )}
+          {track.rootCause && (
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3 text-rose-100">
+              <span className="mr-2 text-rose-300">根因</span>{track.rootCause}
+            </div>
+          )}
+          {blockerLine && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-amber-100">
+              <span className="mr-2 text-amber-300">Blockers</span>{blockerLine}
+            </div>
+          )}
+          {openLoopLine && (
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              <span className="mr-2 text-cyan-300">Open Loops</span>{openLoopLine}
+            </div>
+          )}
+          {track.nextHandoff && (
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              <span className="mr-2 text-cyan-300">下一交接點</span>{track.nextHandoff}
+            </div>
+          )}
+          {suggestedSubagents.length > 0 && (
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              <span className="mr-2 text-cyan-300">建議子代理</span>{suggestedSubagents.join(' / ')}
+            </div>
+          )}
+          {sidecarDispatchLine && (
+            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-cyan-100">
+              <span className="mr-2 text-cyan-300">已叫進 reviewer</span>{sidecarDispatchLine}
+            </div>
+          )}
+          {consensus?.recommendedAction && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-emerald-100">
+              <span className="mr-2 text-emerald-300">共識動作</span>{consensus.recommendedAction}
+            </div>
+          )}
+          {track.evolutionNote && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-emerald-100">
+              <span className="mr-2 text-emerald-300">演化備註</span>{track.evolutionNote}
+            </div>
+          )}
+          {reusableRule && (
+            <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/5 px-4 py-3 text-fuchsia-100">
+              <span className="mr-2 text-fuchsia-300">Reusable Rule</span>
+              {reusableRule.title}
+              {reusableRule.summary ? ` / ${reusableRule.summary}` : ''}
+              {` / ${formatRuleStatus(reusableRule.status)}`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {childTasks.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-cyan-500/10 bg-cyan-500/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">Task Graph</div>
+            <div className="text-xs text-gray-500">
+              子任務 {track.childTaskCount || childTasks.length} 題 / 活躍中 {track.activeChildTaskCount || 0} 題
+            </div>
+          </div>
+          <div className="mt-3 space-y-3">
+            {childTasks.map((child) => {
+              const childBlockers = (child.blockers || []).filter(Boolean).join(' / ')
+              const childOpenLoops = (child.openLoops || []).filter(Boolean).join(' / ')
+              return (
+                <div
+                  key={child.id}
+                  className={`rounded-xl border px-4 py-3 ${child.staleMemory ? 'border-amber-500/20 bg-amber-500/5' : 'border-white/8 bg-black/20'}`}
+                >
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-cyan-200">
+                          {child.agentEmoji} {child.agentName}
+                        </span>
+                        <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-gray-300">
+                          {formatTaskType(child.taskType)}
+                        </span>
+                        <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-gray-400">
+                          {formatStatusLabel(child.status, WORKFLOW_STATUS_LABEL, '進行中')}
+                        </span>
+                        {child.mergePolicy && (
+                          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-emerald-200">
+                            {formatMergePolicy(child.mergePolicy)}
+                          </span>
+                        )}
+                        {child.riskTier && (
+                          <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-gray-300">
+                            {formatRiskTier(child.riskTier)}
+                          </span>
+                        )}
+                        {child.closedByParent && (
+                          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-amber-200">
+                            由主任務關閉
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 text-sm text-white">{child.title}</div>
+                      {child.summary && (
+                        <div className="mt-1 text-xs leading-6 text-gray-300">{child.summary}</div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {formatRelativeTime(child.updatedAt)} / {formatTime(child.updatedAt)}
+                    </div>
+                  </div>
+
+                  {(child.rootCause || childBlockers || childOpenLoops || child.resolutionSource || child.consensus?.summary || child.humanGateReason) && (
+                    <div className="mt-3 space-y-2 text-xs leading-6">
+                      {child.consensus?.summary && (
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-100">
+                          <span className="mr-2 text-emerald-300">共識</span>{child.consensus.summary}
+                        </div>
+                      )}
+                      {child.humanGateReason && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-100">
+                          <span className="mr-2 text-amber-300">人工 Gate</span>{child.humanGateReason}
+                        </div>
+                      )}
+                      {child.rootCause && (
+                        <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-rose-100">
+                          <span className="mr-2 text-rose-300">根因</span>{child.rootCause}
+                        </div>
+                      )}
+                      {childBlockers && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-100">
+                          <span className="mr-2 text-amber-300">Blockers</span>{childBlockers}
+                        </div>
+                      )}
+                      {childOpenLoops && (
+                        <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2 text-gray-300">
+                          <span className="mr-2 text-cyan-300">Open Loops</span>{childOpenLoops}
+                        </div>
+                      )}
+                      {child.resolutionSource && (
+                        <div className="rounded-lg border border-white/6 bg-black/20 px-3 py-2 text-gray-300">
+                          <span className="mr-2 text-cyan-300">收斂來源</span>{formatResolutionSource(child.resolutionSource)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LobsterBrainPanel({ lobsterBrain }) {
+  if (!lobsterBrain) return null
+  const tracks = lobsterBrain.trackedTasks || []
+  const reusableRules = lobsterBrain.reusableRules || []
+  return (
+    <div className="glass-card rounded-2xl p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">龍蝦大腦</div>
+          <div className="mt-2 font-display text-2xl text-white">正式記憶與追蹤面板</div>
+          <div className="mt-3 max-w-3xl text-sm leading-7 text-gray-400">
+            這裡看的是任務腦內狀態，不只是流程狀態。包含目標、焦點、根因、委派狀態、續跑佇列與演化備註。
+          </div>
+        </div>
+        <div className="text-xs text-gray-500">
+          追蹤中 {lobsterBrain.activeTaskCount || 0} 題 / 已補根因 {lobsterBrain.rootedCount || 0} 題 / 已補演化 {lobsterBrain.evolvingCount || 0} 題
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <LobsterMetricCard label="活躍任務" value={lobsterBrain.activeTaskCount || 0} Icon={BrainCircuit} tone="cyan" />
+        <LobsterMetricCard label="圖譜節點" value={lobsterBrain.taskGraphNodeCount || 0} Icon={GitBranchPlus} tone="cyan" />
+        <LobsterMetricCard label="活躍子任務" value={lobsterBrain.activeChildTaskCount || 0} Icon={RefreshCw} tone="cyan" />
+        <LobsterMetricCard label="續跑佇列" value={lobsterBrain.continuationQueueCount || 0} Icon={Orbit} tone="amber" />
+        <LobsterMetricCard label="委派中" value={lobsterBrain.delegatedRunCount || 0} Icon={Bot} tone="cyan" />
+        <LobsterMetricCard label="sidecar reviewer" value={lobsterBrain.sidecarDispatchCount || 0} Icon={RefreshCw} tone="cyan" />
+        <LobsterMetricCard label="已補根因" value={lobsterBrain.rootedCount || 0} Icon={Bug} tone="rose" />
+        <LobsterMetricCard label="有演化備註" value={lobsterBrain.evolvingCount || 0} Icon={Sparkles} tone="emerald" />
+        <LobsterMetricCard label="記憶過舊" value={lobsterBrain.staleMemoryCount || 0} Icon={GitBranchPlus} tone="amber" />
+        <LobsterMetricCard label="人工 Gate" value={lobsterBrain.humanGateCount || 0} Icon={ShieldAlert} tone="amber" />
+        <LobsterMetricCard label="共識阻擋" value={lobsterBrain.blockedConsensusCount || 0} Icon={AlertTriangle} tone="rose" />
+        <LobsterMetricCard label="Reusable Rule" value={lobsterBrain.reusableRuleCount || 0} Icon={Sparkles} tone="emerald" />
+      </div>
+
+      <div className="mt-5 space-y-3">
+        {tracks.length === 0 ? (
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-300">
+            目前沒有活躍中的龍蝦記憶追蹤任務。
+          </div>
+        ) : (
+          tracks.map((track) => <LobsterTrackCard key={track.id} track={track} />)
+        )}
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-fuchsia-500/10 bg-fuchsia-500/5 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-300">Reusable Memory</div>
+          <div className="text-xs text-gray-500">最近 {reusableRules.length} 條規則候選</div>
+        </div>
+        <div className="mt-3 space-y-3">
+          {reusableRules.length === 0 ? (
+            <div className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm text-gray-400">
+              目前還沒有被升格成 reusable rule 的候選。
+            </div>
+          ) : reusableRules.map((rule) => (
+            <div key={rule.id} className="rounded-xl border border-white/8 bg-black/20 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-fuchsia-200">
+                  {rule.category || 'guardrail'}
+                </span>
+                <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-gray-300">
+                  {formatRuleStatus(rule.status)}
+                </span>
+                <span className="text-[11px] text-gray-500">信心 {Math.round(Number(rule.confidence || 0) * 100)}%</span>
+              </div>
+              <div className="mt-2 text-sm text-white">{rule.title || '未命名規則'}</div>
+              {rule.summary && (
+                <div className="mt-1 text-xs leading-6 text-gray-300">{rule.summary}</div>
+              )}
+              <div className="mt-2 text-[11px] text-gray-500">
+                Trigger: {rule.triggerKey || 'general'}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LobsterBrainTeaser({ lobsterBrain }) {
+  if (!lobsterBrain) return null
+
+  return (
+    <div className="glass-card rounded-2xl p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-3xl">
+          <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">龍蝦大腦</div>
+          <div className="mt-2 font-display text-2xl text-white">獨立進度面板已拆出去</div>
+          <div className="mt-3 text-sm leading-7 text-gray-400">
+            首頁只留摘要，完整的 task graph、reviewer、verifier、consensus 與 reusable memory 已移到獨立頁，避免老闆收件匣資訊太雜。
+          </div>
+        </div>
+
+        <Link
+          href="/office/openclaw"
+          className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/8 px-4 py-2 text-sm text-cyan-200 transition hover:bg-cyan-500/14"
+        >
+          打開龍蝦面板
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <LobsterMetricCard label="活躍任務" value={lobsterBrain.activeTaskCount || 0} Icon={BrainCircuit} tone="cyan" />
+        <LobsterMetricCard label="活躍子任務" value={lobsterBrain.activeChildTaskCount || 0} Icon={RefreshCw} tone="cyan" />
+        <LobsterMetricCard label="續跑佇列" value={lobsterBrain.continuationQueueCount || 0} Icon={Orbit} tone="amber" />
+        <LobsterMetricCard label="人工 Gate" value={lobsterBrain.humanGateCount || 0} Icon={ShieldAlert} tone="amber" />
       </div>
     </div>
   )
@@ -805,7 +1319,8 @@ function CandidatePatchRow({ item }) {
   )
 }
 
-export default function BossInboxDashboard() {
+export default function BossInboxDashboard({ mode = 'full' }) {
+  const isLobsterOnly = mode === 'lobster-only'
   const [payload, setPayload] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -831,15 +1346,15 @@ export default function BossInboxDashboard() {
         if (res.status === 401) {
           await refreshOfficeAccess()
           setPayload(null)
-          setOfficeAccessError('請先完成驗證，才能查看老闆收件匣。')
+          setOfficeAccessError(`請先完成驗證，才能查看${inboxAccessLabel}。`)
           return
         }
-        throw new Error(data?.error || '老闆收件匣載入失敗')
+        throw new Error(data?.error || `${inboxLabel}載入失敗`)
       }
       setPayload(data)
     } catch (error) {
       console.error('Failed to fetch boss inbox:', error)
-      setOfficeAccessError((current) => current || error.message || '老闆收件匣載入失敗')
+      setOfficeAccessError((current) => current || error.message || `${inboxLabel}載入失敗`)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -999,6 +1514,7 @@ export default function BossInboxDashboard() {
   const candidatePatches = payload?.candidatePatches || []
   const governanceSummary = payload?.governanceSummary || null
   const autonomyUpgradeAdvice = payload?.autonomyUpgradeAdvice || governanceSummary?.autonomyUpgradeAdvice || null
+  const lobsterBrain = payload?.lobsterBrain || null
   const approvedCandidatePatches = candidatePatches.filter((item) => item.reviewStatus === 'approved')
   const pendingCandidatePatches = candidatePatches.filter((item) => (item.reviewStatus || 'pending') === 'pending')
   const approvedNotAppliedCandidatePatches = candidatePatches.filter((item) => item.reviewStatus === 'approved' && item.applyStatus !== 'applied')
@@ -1169,7 +1685,59 @@ export default function BossInboxDashboard() {
   if (loading) {
     return (
       <div className="glass-card rounded-2xl p-6 text-sm text-gray-400">
-        老闆收件匣載入中...
+        {isLobsterOnly ? '龍蝦大腦面板載入中...' : '老闆收件匣載入中...'}
+      </div>
+    )
+  }
+
+  if (isLobsterOnly) {
+    return (
+      <div className="space-y-6">
+        <div className="glass-card rounded-2xl p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.22em] text-cyan-300">龍蝦大腦</div>
+              <h2 className="mt-2 font-display text-3xl text-white">自主執行進度面板</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-gray-400">
+                這裡只看主任務、child tasks、reviewer、verifier、consensus 與 reusable memory，不再混進老闆收件匣的待拍板事項。
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/office"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:bg-white/5"
+              >
+                返回老闆收件匣
+              </Link>
+              <button
+                type="button"
+                onClick={() => load(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 px-4 py-2 text-sm text-cyan-300 transition hover:bg-cyan-500/10"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                重新整理
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <OfficeAccessPanel
+          access={officeAccess}
+          tokenDraft={officeTokenDraft}
+          busy={officeAccessBusy}
+          error={officeAccessError}
+          onTokenChange={setOfficeTokenDraft}
+          onSubmit={submitOfficeAccess}
+          onLogout={clearOfficeAccess}
+        />
+
+        {officeAccess.configured && !officeAccess.authenticated && !payload && (
+          <div className="glass-card rounded-2xl p-6 text-sm leading-7 text-gray-300">
+            先完成驗證，這裡的龍蝦任務圖譜與 reviewer / verifier 狀態才會顯示。
+          </div>
+        )}
+
+        <LobsterBrainPanel lobsterBrain={lobsterBrain} />
       </div>
     )
   }
@@ -1286,6 +1854,8 @@ export default function BossInboxDashboard() {
           )}
         </div>
       )}
+
+      <LobsterBrainTeaser lobsterBrain={lobsterBrain} />
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
         <motion.section

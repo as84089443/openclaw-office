@@ -10,6 +10,7 @@ import {
   Sparkles,
   TerminalSquare,
 } from 'lucide-react'
+import { resolveCurrentSection } from '../lib/app-chrome-section'
 
 const DESKTOP_NAV_ITEMS = [
   { href: '/', label: '首頁', shortLabel: '首頁', icon: Home, match: (pathname) => pathname === '/' },
@@ -37,14 +38,6 @@ const MOBILE_NAV_ITEMS = [
 function isActive(item, pathname) {
   if (typeof item.match === 'function') return item.match(pathname)
   return pathname?.startsWith(item.href)
-}
-
-function resolveCurrentSection(pathname) {
-  const matched = DESKTOP_NAV_ITEMS.find((item) => isActive(item, pathname))
-  if (matched) return matched.label
-  if (pathname?.startsWith('/merchant')) return '店家工作台'
-  if (!pathname) return '首頁'
-  return '控制台'
 }
 
 function DesktopNav({ pathname }) {
