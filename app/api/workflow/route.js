@@ -4145,6 +4145,51 @@ export async function POST(request) {
       return Response.json({ success: true, request: getRequestById(requestId), agent: req.assignedTo, stateConfig: STATE_CONFIG.in_progress })
     }
 
+    // ─────────────────────────────────────────────────────────
+    // ACTION: retry_task - Clear human gate, reset retry count, re-dispatch
+    // ─────────────────────────────────────────────────────────
+    if (action === 'retry_task') {
+      const { taskId } = body
+      const task = getTaskById(taskId)
+      if (!task) return Response.json({ error: 'Task not found' }, { status: 404 })
+      if (['completed', 'failed'].includes(String(task.status || ''))) {
+        return Response.json({ error: 'Cannot retry completed/failed task' }, { status: 400 })
+      }
+      const now = Date.now()
+      const newBudget = Math.max(Number(task.retryBudget || 0), Number(task.retryCount || 0) + 3)
+      const updatedTask = updateTask(task.id, {
+        status: 'in_progress',
+        humanGateReason: null,
+        completionGateRequired: false,
+        retryCount: 0,
+        retryBudget: newBudget,
+        autoContinueAllowed: true,
+        pendingAction: 'start_work',
+        milestone: '重新派工',
+        nextStep: '老闆手動重試，重新開工',
+        ...buildTaskMemoryPatchFromBody(task, {}, {
+          mode: 'execution',
+          focus: '老闆手動重試',
+          summary: '老闆從看板手動觸發重試，清除 gate 並重新派工。',
+          nextCheckpoint: '等待代理回報',
+          blockers: [],
+          openLoops: [],
+          delegation: { currentStatus: 'pending_dispatch' },
+          updatedBy: 'boss-dashboard',
+        }, now),
+      }) || task
+      syncRequestStateFromTask(updatedTask)
+      emitTaskUpdate(task.id)
+      const kicked = await executePendingAction(updatedTask, now)
+      return Response.json({
+        success: true,
+        taskId: task.id,
+        requestId: task.requestId,
+        kicked: Boolean(kicked),
+        status: kicked?.status || updatedTask.status,
+      })
+    }
+
     if (action === 'kick_pending_action') {
       const { requestId, taskId } = body
       const task = taskId ? getTaskById(taskId) : (requestId ? getTaskByRequestId(requestId) : null)

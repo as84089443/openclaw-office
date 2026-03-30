@@ -380,6 +380,7 @@ function LobsterTrackSection({
   emptyText,
   collapsible = false,
   defaultOpen = false,
+  onRefresh,
 }) {
   if (!tracks || tracks.length === 0) return null
 
@@ -394,7 +395,7 @@ function LobsterTrackSection({
         <div className="text-xs text-gray-500">{tracks.length} 題</div>
       </div>
       <div className="space-y-3">
-        {tracks.map((track) => <LobsterTrackCard key={track.id} track={track} />)}
+        {tracks.map((track) => <LobsterTrackCard key={track.id} track={track} onRefresh={onRefresh} />)}
       </div>
     </div>
   )
@@ -418,13 +419,50 @@ function LobsterTrackSection({
           <div className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm text-gray-400">
             {emptyText}
           </div>
-        ) : tracks.map((track) => <LobsterTrackCard key={track.id} track={track} />)}
+        ) : tracks.map((track) => <LobsterTrackCard key={track.id} track={track} onRefresh={onRefresh} />)}
       </div>
     </details>
   )
 }
 
-function LobsterTrackCard({ track }) {
+function LobsterTrackCard({ track, onRefresh }) {
+  const [busy, setBusy] = useState(null)
+  const [actionError, setActionError] = useState('')
+
+  const callWorkflow = async (body) => {
+    const res = await fetch('/api/workflow', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data?.error || '操作失敗')
+    return data
+  }
+
+  const handleAction = async (action) => {
+    setBusy(action)
+    setActionError('')
+    try {
+      if (action === 'retry') {
+        await callWorkflow({ action: 'retry_task', taskId: track.id })
+      } else if (action === 'release') {
+        await callWorkflow({ action: 'retry_task', taskId: track.id })
+      } else if (action === 'delete') {
+        if (!track.requestId) throw new Error('找不到 requestId，無法刪除')
+        await callWorkflow({ action: 'manual_complete', requestId: track.requestId, result: '已由看板刪除' })
+      }
+      if (onRefresh) setTimeout(() => onRefresh(true), 800)
+    } catch (err) {
+      setActionError(err.message || '操作失敗')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const isBlocked = ['blocked', 'human_gate'].includes(String(track.status || ''))
+  const isActive = !['completed', 'failed'].includes(String(track.status || ''))
+
   const blockerLine = (track.blockers || []).filter(Boolean).join(' / ')
   const openLoopLine = (track.openLoops || []).filter(Boolean).join(' / ')
   const suggestedSubagents = (track.suggestedSubagents || []).filter(Boolean)
@@ -707,11 +745,45 @@ function LobsterTrackCard({ track }) {
           </div>
         </div>
       )}
+
+      {isActive && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {isBlocked && (
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() => handleAction('release')}
+              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {busy === 'release' ? '放行中…' : '✅ 放行'}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => handleAction('retry')}
+            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busy === 'retry' ? '重試中…' : '🔁 再試一次'}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => { if (window.confirm('確定要刪除這個任務嗎？')) handleAction('delete') }}
+            className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busy === 'delete' ? '刪除中…' : '🗑 刪除'}
+          </button>
+          {actionError && (
+            <span className="text-xs text-rose-400">{actionError}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function LobsterBrainPanel({ lobsterBrain }) {
+function LobsterBrainPanel({ lobsterBrain, onRefresh }) {
   if (!lobsterBrain) return null
   const tracks = lobsterBrain.trackedTasks || []
   const directIngressTracks = lobsterBrain.directIngressTracks || []
@@ -767,6 +839,7 @@ function LobsterBrainPanel({ lobsterBrain }) {
               title="只看你從 Discord / TG 直接丟進來的題目"
               description="這一區才是你最近真的交辦給魚群的任務。"
               tracks={directIngressTracks}
+              onRefresh={onRefresh}
             />
             <LobsterTrackSection
               eyebrow="手動 / API 交辦"
@@ -775,6 +848,7 @@ function LobsterBrainPanel({ lobsterBrain }) {
               tracks={manualRequestTracks}
               emptyText="目前沒有手動 / API 交辦。"
               collapsible
+              onRefresh={onRefresh}
             />
             <LobsterTrackSection
               eyebrow="背景自治 / 維運"
@@ -783,6 +857,7 @@ function LobsterBrainPanel({ lobsterBrain }) {
               tracks={backgroundTracks}
               emptyText="目前沒有背景自治任務。"
               collapsible
+              onRefresh={onRefresh}
             />
           </>
         )}
@@ -1888,7 +1963,7 @@ export default function BossInboxDashboard({ mode = 'full' }) {
           </div>
         )}
 
-        <LobsterBrainPanel lobsterBrain={lobsterBrain} />
+        <LobsterBrainPanel lobsterBrain={lobsterBrain} onRefresh={load} />
       </div>
     )
   }
