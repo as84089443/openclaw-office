@@ -2,9 +2,11 @@
  * GET /api/autopen/tasks — 代理 BWS-WEB autopen 任務列表（解決 CORS）
  */
 import { NextResponse } from 'next/server'
-
-const BWS_API = process.env.BWS_API_URL || 'https://www.bw-space.com'
-const AUTOPEN_KEY = process.env.AUTOPEN_API_KEY || ''
+import {
+  createAutopenErrorPayload,
+  fetchAutopenUpstream,
+  withAutopenMeta,
+} from '../../../../lib/autopen-proxy.js'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,20 +20,20 @@ export async function GET(request) {
     const params = new URLSearchParams({ limit, page })
     if (status) params.set('status', status)
 
-    const r = await fetch(`${BWS_API}/api/admin/autopen?${params}`, {
-      headers: {
-        'x-api-key': AUTOPEN_KEY,
-        'Content-Type': 'application/json',
-      },
-      next: { revalidate: 0 },
+    const result = await fetchAutopenUpstream({
+      upstreamPath: '/api/admin/autopen',
+      query: params,
+      headers: { 'Content-Type': 'application/json' },
     })
 
-    if (!r.ok) {
-      return NextResponse.json({ error: `BWS API ${r.status}` }, { status: r.status })
+    if (!result.ok) {
+      return NextResponse.json(
+        createAutopenErrorPayload(result, 'AutoPen 任務列表同步失敗'),
+        { status: result.status },
+      )
     }
 
-    const data = await r.json()
-    return NextResponse.json(data)
+    return NextResponse.json(withAutopenMeta(result.data, result.meta, 'tasks'))
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
@@ -40,16 +42,22 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json()
-    const r = await fetch(`${BWS_API}/api/admin/autopen/batch-by-titles`, {
+    const result = await fetchAutopenUpstream({
+      upstreamPath: '/api/admin/autopen/batch-by-titles',
       method: 'POST',
-      headers: {
-        'x-api-key': AUTOPEN_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
+      body,
     })
-    const data = await r.json()
-    return NextResponse.json(data, { status: r.status })
+
+    if (!result.ok) {
+      return NextResponse.json(
+        createAutopenErrorPayload(result, '建立 AutoPen 任務失敗'),
+        { status: result.status },
+      )
+    }
+
+    return NextResponse.json(withAutopenMeta(result.data, result.meta, 'tasks'), {
+      status: result.status,
+    })
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

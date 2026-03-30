@@ -1,5 +1,6 @@
 import './globals.css'
 import AppChrome from '../components/AppChrome'
+import ChunkRecoveryBridge from '../components/ChunkRecoveryBridge'
 
 export const metadata = {
   title: 'BW Copilot 工作入口',
@@ -11,6 +12,7 @@ export default function RootLayout({ children }) {
     <html lang="zh-Hant">
       <body className="min-h-screen cyber-grid relative">
         <div className="cyber-rain" />
+        <ChunkRecoveryBridge />
         <AppChrome>{children}</AppChrome>
       </body>
     </html>

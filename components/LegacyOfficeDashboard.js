@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowRight, FlaskConical, Inbox, Sparkles, TerminalSquare } from 'lucide-react'
+import { ArrowRight, BrainCircuit, FlaskConical, Inbox, Sparkles, TerminalSquare } from 'lucide-react'
 import BossInboxDashboard from './BossInboxDashboard'
 import WorkModeToggle from './WorkModeToggle'
 
@@ -20,6 +20,13 @@ const supportLinks = [
     description: '看實驗、QA、最近變更。',
     icon: FlaskConical,
     accent: '#ff6b35',
+  },
+  {
+    href: '/office/openclaw',
+    title: '龍蝦大腦',
+    description: '看主任務、child tasks 與 reviewer / verifier 進度。',
+    icon: BrainCircuit,
+    accent: '#06b6d4',
   },
   {
     href: '/studio',

@@ -22,6 +22,10 @@ export NODE_ENV=production
 
 cd "$PROJECT_ROOT"
 
+ensure_clawx_operator_ingress_patch() {
+  "$NODE_BIN" /Users/brian/.openclaw/scripts/apply-clawx-discord-operator-ingress-patch.mjs
+}
+
 ensure_native_runtime() {
   if ! "$NODE_BIN" -e "require('better-sqlite3')" >/dev/null 2>&1; then
     echo "[openclaw-office] better-sqlite3 與目前 Node 不相容，改用 Node 24 重新編譯..."
@@ -88,15 +92,38 @@ PY
   printf '%s\n' "4201"
 }
 
+wait_for_port_release() {
+  local port="$1"
+  local deadline=$((SECONDS + 12))
+
+  while "$LSOF_BIN" -nP -iTCP:"$port" -sTCP:LISTEN -t 1>/dev/null 2>&1; do
+    if (( SECONDS >= deadline )); then
+      echo "[openclaw-office] port $port 仍被占用，放棄這次 launchd 重啟。"
+      return 1
+    fi
+    sleep 1
+  done
+
+  return 0
+}
+
 if [[ "${OPENCLAW_FORCE_LOCAL:-0}" != "1" ]]; then
   PORT_TO_CHECK="$(resolve_port)"
   if "$LSOF_BIN" -nP -iTCP:"$PORT_TO_CHECK" -sTCP:LISTEN -t 1>/dev/null 2>&1; then
-    echo "[openclaw-office] port $PORT_TO_CHECK already bound. skip host startup."
-    exit 0
+    if [[ "${XPC_SERVICE_NAME:-}" = "ai.openclaw.office" ]]; then
+      echo "[openclaw-office] port $PORT_TO_CHECK still bound during launchd restart. waiting for release..."
+      if ! wait_for_port_release "$PORT_TO_CHECK"; then
+        exit 0
+      fi
+    else
+      echo "[openclaw-office] port $PORT_TO_CHECK already bound. skip host startup."
+      exit 0
+    fi
   fi
 fi
 
 ensure_native_runtime
 ensure_build_runtime
+ensure_clawx_operator_ingress_patch
 
 exec "$NODE_BIN" start.js

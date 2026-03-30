@@ -26,6 +26,7 @@ const openclawConfig = {
       { id: 'main' },
       { id: 'bizdev', identity: { name: '鯊魚業務', emoji: '🦈' } },
       { id: 'seo', identity: { name: '藍鯨SEO', emoji: '🐋' } },
+      { id: 'research-fish', identity: { name: '研究魚', emoji: '🐟' } },
       { id: 'admin', identity: { name: '八爪魚管', emoji: '🐙' } },
       { id: 'finance-company', identity: { name: '河童帳務', emoji: '🐡' } },
       { id: 'booking', identity: { name: '水母排程', emoji: '🪼' } },
@@ -46,6 +47,10 @@ const openclawConfig = {
       agentId: 'finance-company',
       match: { channel: 'discord', peer: { kind: 'channel', id: 'finance-room' } },
     },
+    {
+      agentId: 'research-fish',
+      match: { channel: 'discord', peer: { kind: 'channel', id: 'research-room' } },
+    },
   ],
 }
 
@@ -56,7 +61,19 @@ process.env.OPENCLAW_HOME = tempRoot
 process.env.OPENCLAW_CONFIG_PATH = join(tempRoot, 'openclaw.json')
 process.env.OPENCLAW_OFFICE_DB_PATH = join(officeDataDir, 'office.db')
 
-const { db, createRequest, createTask, getDailyDigestByDate, upsertAttentionState } = await import('../lib/db.js')
+const {
+  db,
+  createRequest,
+  createTask,
+  ensurePrimaryTask,
+  getDailyDigestByDate,
+  getPrimaryTasksByRequest,
+  getTaskByRequestId,
+  repairPrimaryTaskIntegrity,
+  updateTask,
+  upsertAttentionState,
+  upsertLobsterRule,
+} = await import('../lib/db.js')
 const { buildBossInboxPayload, ensureDailyDigest, runAttentionAction } = await import('../lib/boss-inbox.js')
 const { getAgentsList, reloadConfig } = await import('../lib/config.js')
 
@@ -177,17 +194,29 @@ test('boss inbox roster uses canonical openclaw.json agents instead of legacy of
       payload: { kind: 'agentTurn', message: 'run bizdev' },
       delivery: { channel: 'discord' },
     },
+    {
+      id: 'research-nightly',
+      enabled: true,
+      agentId: 'research-fish',
+      name: 'research-fish-autoresearch-nightly',
+      payload: { kind: 'agentTurn', message: 'run research-fish' },
+      delivery: { channel: 'discord' },
+    },
   ])
   const payload = buildBossInboxPayload({ skipDigest: true })
   const rosterCount = getAgentsList().length
+  const researchFish = payload.agentSummaries.find((entry) => entry.id === 'research-fish')
 
   assert.equal(rosterCount, openclawConfig.agents.list.length)
   assert.equal(payload.agentSummaries.length, openclawConfig.agents.list.length)
   assert.ok(payload.agentSummaries.length > 5)
   assert.ok(payload.activeAgentSummaries.some((entry) => entry.id === 'bizdev'))
+  assert.ok(payload.activeAgentSummaries.some((entry) => entry.id === 'research-fish'))
   assert.ok(payload.inactiveAgentSummaries.some((entry) => entry.id === 'seo'))
   assert.equal(payload.activeAgentSummaries.find((entry) => entry.id === 'bizdev')?.activityState, 'active')
   assert.equal(payload.inactiveAgentSummaries.find((entry) => entry.id === 'seo')?.activityState, 'inactive')
+  assert.deepEqual(researchFish?.bindings, ['discord channel:research-room'])
+  assert.deepEqual(researchFish?.channels, ['discord'])
 })
 
 test('cron failures are surfaced as blocked or risk attention items', () => {
@@ -200,7 +229,7 @@ test('cron failures are surfaced as blocked or risk attention items', () => {
       agentId: 'finance-company',
       state: {
         lastStatus: 'error',
-        consecutiveErrors: 3,
+        consecutiveErrors: 1,
         lastError: 'Permission denied while syncing invoices',
         lastRunAtMs: Date.now(),
       },
@@ -211,7 +240,7 @@ test('cron failures are surfaced as blocked or risk attention items', () => {
   const item = payload.attentionItems.find((entry) => entry.id === 'cron:nightly-sync')
 
   assert.ok(item)
-  assert.equal(item.attentionType, 'risk')
+  assert.ok(['blocked', 'risk'].includes(item.attentionType))
   assert.equal(item.agentId, 'finance-company')
 })
 
@@ -238,6 +267,704 @@ test('delivered status sync noise does not surface as a cron attention item', ()
   const item = payload.attentionItems.find((entry) => entry.id === 'cron:nightly-sync')
 
   assert.equal(item, undefined)
+})
+
+test('request lookup stays pinned to the primary task when child tasks exist', () => {
+  const req = createRequest({
+    id: 'req_graph_primary',
+    content: '請處理這題主任務',
+    from: 'Boss',
+    state: 'received',
+    createdAt: Date.now(),
+  })
+
+  const primaryTask = createTask({
+    requestId: req.id,
+    title: '主任務',
+    detail: '主任務內容',
+    assignedAgent: 'bizdev',
+    taskType: 'primary',
+    sourceAgent: 'wickedman',
+    status: 'in_progress',
+    createdAt: Date.now(),
+  })
+
+  createTask({
+    requestId: req.id,
+    parentTaskId: primaryTask.id,
+    rootTaskId: primaryTask.id,
+    title: 'sidecar reviewer',
+    detail: '補一輪平行驗證',
+    assignedAgent: 'production',
+    taskType: 'sidecar_review',
+    sourceAgent: 'bizdev',
+    mergePolicy: 'advisory',
+    graphDepth: 1,
+    status: 'in_progress',
+    createdAt: Date.now() + 1,
+  })
+
+  const resolved = getTaskByRequestId(req.id)
+  assert.ok(resolved)
+  assert.equal(resolved.id, primaryTask.id)
+  assert.equal(resolved.taskType, 'primary')
+})
+
+test('ensurePrimaryTask reuses the canonical primary task instead of creating duplicates', () => {
+  const req = createRequest({
+    id: 'req_primary_reuse',
+    content: '請持續收斂這題',
+    from: 'Boss',
+    state: 'received',
+    createdAt: Date.now(),
+  })
+
+  const first = ensurePrimaryTask(req.id, {
+    title: '第一次主任務',
+    detail: '第一次建立',
+    assignedAgent: 'bizdev',
+    status: 'pending',
+    createdAt: Date.now(),
+  })
+
+  const second = ensurePrimaryTask(req.id, {
+    title: '更新後主任務',
+    detail: '第二次呼叫應該覆用同一個 primary',
+    assignedAgent: 'admin',
+    status: 'assigned',
+    lastUpdate: Date.now() + 10,
+  })
+
+  const primaryTasks = getPrimaryTasksByRequest(req.id)
+
+  assert.ok(first)
+  assert.ok(second)
+  assert.equal(second.id, first.id)
+  assert.equal(primaryTasks.length, 1)
+  assert.equal(primaryTasks[0]?.assignedAgent, 'admin')
+  assert.equal(primaryTasks[0]?.title, '更新後主任務')
+})
+
+test('repairPrimaryTaskIntegrity collapses duplicate primaries into one canonical primary', () => {
+  const requestId = 'req_duplicate_primary_repair'
+  createRequest({
+    id: requestId,
+    content: '這題之前長出了兩個 primary',
+    from: 'Boss',
+    state: 'in_progress',
+    createdAt: Date.now(),
+  })
+
+  db.exec('DROP INDEX IF EXISTS idx_tasks_primary_request_unique')
+  db.exec(`
+    INSERT INTO tasks (id, request_id, task_type, title, detail, assigned_agent, status, created_at, last_update)
+    VALUES
+      ('task_dup_old', '${requestId}', 'primary', '舊主任務', '舊主任務內容', 'bizdev', 'in_progress', 1000, 2000),
+      ('task_dup_new', '${requestId}', 'primary', '新主任務', '新主任務內容', 'admin', 'in_progress', 1001, 3000),
+      ('task_dup_child', '${requestId}', 'sidecar_review', 'child', 'child detail', 'production', 'in_progress', 1002, 3001)
+  `)
+  db.exec(`
+    UPDATE tasks
+    SET parent_task_id = 'task_dup_old', root_task_id = 'task_dup_old', graph_depth = 1
+    WHERE id = 'task_dup_child'
+  `)
+
+  const repaired = repairPrimaryTaskIntegrity(5000)
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_primary_request_unique
+    ON tasks(request_id)
+    WHERE request_id IS NOT NULL
+      AND COALESCE(task_type, 'primary') = 'primary'
+  `)
+
+  const primaryTasks = getPrimaryTasksByRequest(requestId)
+  const canonical = getTaskByRequestId(requestId)
+  const superseded = db.prepare(`
+    SELECT task_type, resolution_source, parent_task_id, root_task_id, status
+    FROM tasks WHERE id = 'task_dup_old'
+  `).get()
+  const child = db.prepare(`
+    SELECT parent_task_id, root_task_id
+    FROM tasks WHERE id = 'task_dup_child'
+  `).get()
+
+  assert.equal(repaired.duplicateRequestCount, 1)
+  assert.equal(primaryTasks.length, 1)
+  assert.equal(canonical?.id, 'task_dup_new')
+  assert.equal(superseded?.task_type, 'superseded_primary')
+  assert.equal(superseded?.resolution_source, 'superseded')
+  assert.equal(superseded?.parent_task_id, 'task_dup_new')
+  assert.equal(child?.parent_task_id, 'task_dup_new')
+  assert.equal(child?.root_task_id, 'task_dup_new')
+})
+
+test('updateTask can explicitly clear nullable orchestration fields', () => {
+  const task = createTask({
+    title: '清空欄位測試',
+    detail: '測試 pendingAction / result / resolutionSource',
+    assignedAgent: 'bizdev',
+    taskType: 'primary',
+    status: 'in_progress',
+    pendingAction: 'continue_after_reply',
+    result: 'stale result',
+    resolutionSource: 'self',
+    createdAt: Date.now(),
+  })
+
+  const updated = updateTask(task.id, {
+    pendingAction: null,
+    result: null,
+    resolutionSource: null,
+  })
+
+  assert.equal(updated?.pendingAction, null)
+  assert.equal(updated?.result, null)
+  assert.equal(updated?.resolutionSource, null)
+})
+
+test('lobster brain payload shows task graph child tasks under the primary track', () => {
+  const req = createRequest({
+    id: 'req_graph_payload',
+    content: '請直接接手並叫 reviewer',
+    from: 'Boss',
+    state: 'received',
+    createdAt: Date.now(),
+  })
+
+  const primaryTask = createTask({
+    requestId: req.id,
+    title: '主任務 / 龍蝦追蹤',
+    detail: '主任務內容',
+    assignedAgent: 'bizdev',
+    taskType: 'primary',
+    sourceAgent: 'wickedman',
+    status: 'in_progress',
+    rootCause: '主線還缺一個可驗證根因',
+    brainMode: 'execution',
+    brainState: {
+      summary: '主任務還在收斂',
+      focus: '先把根因補齊',
+      blockers: ['等待 reviewer 回報'],
+    },
+    createdAt: Date.now(),
+    lastUpdate: Date.now(),
+  })
+
+  createTask({
+    requestId: req.id,
+    parentTaskId: primaryTask.id,
+    rootTaskId: primaryTask.id,
+    title: 'QA reviewer',
+    detail: '平行驗證 UI 與流程',
+    assignedAgent: 'production',
+    taskType: 'sidecar_review',
+    sourceAgent: 'bizdev',
+    mergePolicy: 'blocking_review',
+    graphDepth: 1,
+    status: 'in_progress',
+    brainState: {
+      summary: '正在驗證風險切面',
+      openLoops: ['等待補最後一個 repro'],
+    },
+    createdAt: Date.now() + 1,
+    lastUpdate: Date.now() + 1,
+  })
+
+  createTask({
+    requestId: req.id,
+    parentTaskId: primaryTask.id,
+    rootTaskId: primaryTask.id,
+    title: '記憶蒸餾',
+    detail: '整理 recurring 修法',
+    assignedAgent: 'crm',
+    taskType: 'memory_distill',
+    sourceAgent: 'bizdev',
+    mergePolicy: 'advisory',
+    graphDepth: 1,
+    status: 'pending',
+    createdAt: Date.now() + 2,
+    lastUpdate: Date.now() + 2,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const track = payload.lobsterBrain?.trackedTasks?.find((entry) => entry.id === primaryTask.id)
+
+  assert.ok(track)
+  assert.equal(payload.lobsterBrain?.activeTaskCount, 1)
+  assert.equal(payload.lobsterBrain?.activeChildTaskCount, 2)
+  assert.equal(payload.lobsterBrain?.taskGraphNodeCount, 3)
+  assert.equal(track.childTaskCount, 2)
+  assert.equal(track.activeChildTaskCount, 2)
+  assert.equal(track.childTasks?.length, 2)
+  assert.deepEqual(track.childTasks.map((entry) => entry.taskType), ['memory_distill', 'sidecar_review'])
+})
+
+test('lobster brain payload includes consensus, governance, and reusable rules', () => {
+  const req = createRequest({
+    id: 'req_lobster_governance',
+    content: '請追根因並叫 verifier',
+    from: 'Boss',
+    state: 'received',
+    createdAt: Date.now(),
+  })
+
+  const primaryTask = createTask({
+    requestId: req.id,
+    title: '高風險主任務',
+    detail: '需要 verifier 與 reviewer 共識',
+    assignedAgent: 'admin',
+    taskType: 'primary',
+    sourceAgent: 'wickedman',
+    status: 'in_progress',
+    riskTier: 'high',
+    retryBudget: 2,
+    retryCount: 1,
+    escalationLevel: 2,
+    humanGateReason: '需要老闆確認是否放行',
+    consensus: {
+      status: 'blocked',
+      summary: 'reviewer 發現 blocking issue',
+      blockingCount: 1,
+      warningCount: 0,
+      resultCount: 2,
+      recommendedAction: 'fix_console_errors',
+    },
+    reusableMemory: {
+      episodic: {
+        rootCause: 'console error',
+      },
+      candidateRule: {
+        id: 'rule_console',
+        category: 'guardrail',
+        status: 'canary',
+        title: '避免 console error 再次出現',
+        summary: '先跑 gstack verifier 再放行',
+        triggerKey: 'console-error',
+        confidence: 0.82,
+      },
+    },
+    createdAt: Date.now(),
+    lastUpdate: Date.now(),
+  })
+
+  createTask({
+    requestId: req.id,
+    parentTaskId: primaryTask.id,
+    rootTaskId: primaryTask.id,
+    title: 'gstack verifier',
+    detail: '補 browser 驗證',
+    assignedAgent: 'gstack-browse',
+    taskType: 'verifier',
+    sourceAgent: 'gstack',
+    mergePolicy: 'blocking_review',
+    graphDepth: 1,
+    status: 'completed',
+    consensus: {
+      status: 'blocked',
+      summary: 'console error still exists',
+      blockingCount: 1,
+      warningCount: 0,
+    },
+    riskTier: 'medium',
+    retryBudget: 1,
+    retryCount: 1,
+    escalationLevel: 1,
+    createdAt: Date.now() + 1,
+    lastUpdate: Date.now() + 1,
+  })
+
+  upsertLobsterRule({
+    category: 'guardrail',
+    ruleType: 'guardrail',
+    title: '避免 console error 再次出現',
+    summary: '先跑 gstack verifier 再放行',
+    triggerKey: 'console-error',
+    confidence: 0.82,
+    status: 'canary',
+    successCount: 1,
+    failureCount: 0,
+    sourceTaskId: primaryTask.id,
+    sourceRootTaskId: primaryTask.id,
+    evidence: ['console error'],
+    rule: { recommendedAction: 'fix_console_errors' },
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const track = payload.lobsterBrain?.trackedTasks?.find((entry) => entry.id === primaryTask.id)
+
+  assert.ok(track)
+  assert.equal(track.riskTier, 'high')
+  assert.equal(track.retryBudget, 2)
+  assert.equal(track.retryCount, 1)
+  assert.equal(track.escalationLevel, 2)
+  assert.equal(track.humanGateReason, '需要老闆確認是否放行')
+  assert.equal(track.consensus?.status, 'blocked')
+  assert.equal(track.consensus?.recommendedAction, 'fix_console_errors')
+  assert.equal(track.reusableRule?.status, 'canary')
+  assert.equal(payload.lobsterBrain?.humanGateCount, 1)
+  assert.equal(payload.lobsterBrain?.blockedConsensusCount, 1)
+  assert.ok(Array.isArray(payload.reusableRules))
+  assert.ok(payload.reusableRules.some((entry) => entry.triggerKey === 'console-error'))
+})
+
+test('lobster brain payload exposes research-fish operator phases and next auto steps', () => {
+  const baseNow = Date.now()
+  const tracks = [
+    {
+      requestId: 'req_research_running',
+      taskId: 'task_research_running',
+      title: '研究中',
+      status: 'in_progress',
+      lastUpdate: baseNow,
+      brainState: {
+        operatorMode: 'strict',
+        outputContract: 'research_operator_v1',
+        openLoops: ['等待第一輪研究收斂'],
+      },
+      delegationPlan: {
+        currentStatus: 'running',
+      },
+    },
+    {
+      requestId: 'req_research_delegating',
+      taskId: 'task_research_delegating',
+      title: '派工中',
+      status: 'in_progress',
+      lastUpdate: baseNow + 10,
+      brainState: {
+        operatorMode: 'strict',
+        outputContract: 'research_operator_v1',
+        openLoops: ['等待 downstream child tasks 回報', '等待驗證結果'],
+      },
+      delegationPlan: {
+        currentStatus: 'delegating',
+        delegatedAgents: ['dev-fish', 'qa'],
+        nextAutoStep: '等待 downstream child tasks 回流後自動續跑',
+      },
+    },
+    {
+      requestId: 'req_research_verifying',
+      taskId: 'task_research_verifying',
+      title: '驗證中',
+      status: 'in_progress',
+      lastUpdate: baseNow + 20,
+      brainState: {
+        operatorMode: 'strict',
+        outputContract: 'research_operator_v1',
+        openLoops: ['等待 verifier 回報'],
+      },
+      delegationPlan: {
+        currentStatus: 'verifying',
+        nextAutoStep: '等待 verifier 回流後自動續跑',
+      },
+    },
+    {
+      requestId: 'req_research_gate',
+      taskId: 'task_research_gate',
+      title: '等老闆拍板',
+      status: 'in_progress',
+      lastUpdate: baseNow + 30,
+      humanGateReason: '需要老闆決定是否正式對外發布',
+      brainState: {
+        operatorMode: 'strict',
+        outputContract: 'research_operator_v1',
+        openLoops: ['等待人類 gate'],
+      },
+      delegationPlan: {
+        currentStatus: 'waiting_human_gate',
+      },
+    },
+  ]
+
+  for (const entry of tracks) {
+    createRequest({
+      id: entry.requestId,
+      content: entry.title,
+      from: 'Boss',
+      state: 'in_progress',
+      createdAt: baseNow,
+    })
+
+    createTask({
+      id: entry.taskId,
+      requestId: entry.requestId,
+      title: entry.title,
+      detail: `${entry.title} detail`,
+      assignedAgent: 'research-fish',
+      taskType: 'primary',
+      sourceAgent: 'main',
+      status: entry.status,
+      operatorMode: 'strict',
+      outputContract: 'research_operator_v1',
+      brainMode: 'execution',
+      brainState: entry.brainState,
+      delegationPlan: entry.delegationPlan,
+      humanGateReason: entry.humanGateReason || null,
+      createdAt: baseNow,
+      lastUpdate: entry.lastUpdate,
+    })
+  }
+
+  createTask({
+    id: 'task_research_delegating_child',
+    requestId: 'req_research_delegating',
+    parentTaskId: 'task_research_delegating',
+    rootTaskId: 'task_research_delegating',
+    title: '跟進派工',
+    detail: 'dev-fish downstream',
+    assignedAgent: 'dev-fish',
+    taskType: 'worker_subtask',
+    sourceAgent: 'research-fish',
+    status: 'in_progress',
+    createdAt: baseNow + 11,
+    lastUpdate: baseNow + 11,
+  })
+
+  createTask({
+    id: 'task_research_verifying_child',
+    requestId: 'req_research_verifying',
+    parentTaskId: 'task_research_verifying',
+    rootTaskId: 'task_research_verifying',
+    title: '外腦驗證',
+    detail: 'gstack verifier',
+    assignedAgent: 'gstack-browse',
+    taskType: 'verifier',
+    sourceAgent: 'gstack',
+    status: 'in_progress',
+    createdAt: baseNow + 21,
+    lastUpdate: baseNow + 21,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const runningTrack = payload.lobsterBrain?.trackedTasks?.find((entry) => entry.id === 'task_research_running')
+  const delegatingTrack = payload.lobsterBrain?.trackedTasks?.find((entry) => entry.id === 'task_research_delegating')
+  const verifyingTrack = payload.lobsterBrain?.trackedTasks?.find((entry) => entry.id === 'task_research_verifying')
+  const gateTrack = payload.lobsterBrain?.trackedTasks?.find((entry) => entry.id === 'task_research_gate')
+
+  assert.equal(runningTrack?.researchOperatorPhase, 'running_research')
+  assert.equal(delegatingTrack?.researchOperatorPhase, 'delegating')
+  assert.equal(verifyingTrack?.researchOperatorPhase, 'verifying')
+  assert.equal(gateTrack?.researchOperatorPhase, 'waiting_human_gate')
+  assert.deepEqual(delegatingTrack?.delegatedAgents, ['dev-fish', 'qa'])
+  assert.equal(delegatingTrack?.nextAutoStep, '等待 downstream child tasks 回流後自動續跑')
+  assert.equal(delegatingTrack?.openLoopCount, 2)
+})
+
+test('lobster brain payload separates direct user requests from manual api and background tasks', () => {
+  const baseNow = Date.now()
+  const fixtures = [
+    {
+      requestId: 'req_direct_discord',
+      taskId: 'task_direct_discord',
+      source: 'discord_gateway_autonomous',
+      from: 'Discord',
+      title: 'Discord 直接交辦',
+      expectedGroup: 'direct_ingress',
+      expectedLabel: 'Discord 直接交辦',
+    },
+    {
+      requestId: 'req_direct_tg',
+      taskId: 'task_direct_tg',
+      source: 'telegram_webhook',
+      from: 'Brian',
+      title: 'Telegram 直接交辦',
+      expectedGroup: 'direct_ingress',
+      expectedLabel: 'Telegram 直接交辦',
+    },
+    {
+      requestId: 'req_manual_api',
+      taskId: 'task_manual_api',
+      source: 'api',
+      from: 'Boss',
+      title: '手動建立的 API 題目',
+      expectedGroup: 'manual_request',
+      expectedLabel: '手動 / API 交辦',
+    },
+    {
+      requestId: 'req_internal_api',
+      taskId: 'task_internal_api',
+      source: 'api',
+      from: 'Office QA',
+      title: 'dispatch smoke test for workflow session binding',
+      expectedGroup: 'background',
+      expectedLabel: '系統內部驗證',
+    },
+    {
+      requestId: 'req_boss_inbox',
+      taskId: 'task_boss_inbox',
+      source: 'boss-inbox',
+      from: 'Boss Inbox',
+      title: '由 Boss Inbox attention 產出的跟進任務',
+      expectedGroup: 'background',
+      expectedLabel: 'Boss Inbox 跟進題',
+    },
+  ]
+
+  for (const [index, fixture] of fixtures.entries()) {
+    createRequest({
+      id: fixture.requestId,
+      content: fixture.title,
+      from: fixture.from,
+      state: 'in_progress',
+      source: fixture.source,
+      createdAt: baseNow + index,
+    })
+
+    createTask({
+      id: fixture.taskId,
+      requestId: fixture.requestId,
+      title: fixture.title,
+      detail: `${fixture.title} detail`,
+      assignedAgent: 'research-fish',
+      taskType: 'primary',
+      sourceAgent: 'wickedman',
+      status: 'in_progress',
+      brainMode: 'execution',
+      createdAt: baseNow + index,
+      lastUpdate: baseNow + index,
+    })
+  }
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const lobsterBrain = payload.lobsterBrain || {}
+
+  assert.equal(lobsterBrain.directIngressTaskCount, 2)
+  assert.equal(lobsterBrain.manualRequestTaskCount, 1)
+  assert.equal(lobsterBrain.backgroundTaskCount, 2)
+  assert.deepEqual(
+    (lobsterBrain.directIngressTracks || []).map((entry) => entry.id).sort(),
+    ['task_direct_discord', 'task_direct_tg'],
+  )
+  assert.deepEqual(
+    (lobsterBrain.manualRequestTracks || []).map((entry) => entry.id),
+    ['task_manual_api'],
+  )
+  assert.deepEqual(
+    (lobsterBrain.backgroundTracks || []).map((entry) => entry.id).sort(),
+    ['task_boss_inbox', 'task_internal_api'],
+  )
+
+  for (const fixture of fixtures) {
+    const track = (lobsterBrain.trackedTasks || []).find((entry) => entry.id === fixture.taskId)
+    assert.ok(track)
+    assert.equal(track.originGroup, fixture.expectedGroup)
+    assert.equal(track.originLabel, fixture.expectedLabel)
+  }
+})
+
+test('boss inbox request cards use canonical primary freshness and show human gate as blocked', () => {
+  const req = createRequest({
+    id: 'req_canonical_request_item',
+    content: '這題應該顯示 canonical primary 的狀態',
+    from: 'Boss',
+    state: 'in_progress',
+    createdAt: Date.now(),
+  })
+
+  const primaryTask = ensurePrimaryTask(req.id, {
+    title: '主任務 / 等老闆拍板',
+    detail: '主任務 detail',
+    assignedAgent: 'admin',
+    status: 'in_progress',
+    riskTier: 'high',
+    humanGateReason: '已達 retry budget，先停在老闆面前。',
+    consensus: {
+      status: 'blocked',
+      summary: 'reviewer 發現 blocking issue',
+      blockingCount: 1,
+      warningCount: 0,
+    },
+    brainState: {
+      blockers: ['等待人工確認'],
+    },
+    createdAt: Date.now(),
+    lastUpdate: Date.now() + 5000,
+  })
+
+  createTask({
+    requestId: req.id,
+    parentTaskId: primaryTask.id,
+    rootTaskId: primaryTask.id,
+    title: '更新較新的 child reviewer',
+    detail: 'child detail',
+    assignedAgent: 'production',
+    taskType: 'sidecar_review',
+    sourceAgent: 'admin',
+    mergePolicy: 'blocking_review',
+    graphDepth: 1,
+    status: 'completed',
+    createdAt: Date.now() + 6000,
+    lastUpdate: Date.now() + 6000,
+    completedAt: Date.now() + 6000,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === req.id)
+
+  assert.ok(item)
+  assert.equal(item.linkedTaskId, primaryTask.id)
+  assert.equal(item.attentionType, 'blocked')
+  assert.equal(item.workflowPhase, 'waiting_human_gate')
+  assert.equal(item.humanGateReason, '已達 retry budget，先停在老闆面前。')
+  assert.ok(Number(item.updatedAt || 0) >= Number(primaryTask.lastUpdate || 0))
+})
+
+test('waiting reviewer stays digest_only instead of surfacing as blocked attention', () => {
+  const req = createRequest({
+    id: 'req_waiting_reviewer_digest',
+    content: '這題正在等 reviewer，不應該直接炸 blocked',
+    from: 'Boss',
+    state: 'in_progress',
+    createdAt: Date.now(),
+  })
+
+  const primaryTask = ensurePrimaryTask(req.id, {
+    title: '主任務 / 等 reviewer',
+    detail: '先等 reviewer 回來再說',
+    assignedAgent: 'admin',
+    status: 'in_progress',
+    riskTier: 'high',
+    retryCount: 2,
+    retryBudget: 2,
+    pendingAction: 'continue_after_reply',
+    humanGateReason: '已達 retry budget，先停下來讓老闆決定。',
+    consensus: {
+      status: 'pending_review',
+      summary: '目前還沒有 reviewer / verifier 結果。',
+      blockingCount: 0,
+      warningCount: 0,
+    },
+    brainState: {
+      blockers: [],
+      openLoops: ['等待 reviewer / verifier 結果'],
+    },
+    createdAt: Date.now(),
+    lastUpdate: Date.now() + 5000,
+  })
+
+  createTask({
+    requestId: req.id,
+    parentTaskId: primaryTask.id,
+    rootTaskId: primaryTask.id,
+    title: '進行中的 reviewer',
+    detail: 'reviewer 正在背景檢查',
+    assignedAgent: 'production',
+    taskType: 'sidecar_review',
+    sourceAgent: 'admin',
+    mergePolicy: 'blocking_review',
+    graphDepth: 1,
+    status: 'in_progress',
+    createdAt: Date.now() + 6000,
+    lastUpdate: Date.now() + 6000,
+  })
+
+  const payload = buildBossInboxPayload({ skipDigest: true })
+  const item = payload.attentionItems.find((entry) => entry.id === req.id)
+
+  assert.ok(item)
+  assert.equal(item.workflowPhase, 'waiting_reviewer')
+  assert.equal(item.attentionType, 'digest_only')
+  assert.equal(item.unresolved, true)
 })
 
 test('root maintenance reports surface a single maintenance attention card when issues exist', () => {

@@ -17,6 +17,7 @@ npm run demo
 - `http://localhost:4200/merchant`：商家面
 - `http://localhost:4200/ops`：營運面
 - `http://localhost:4200/office`：BW Office / Boss Inbox
+- `http://localhost:4200/office/openclaw`：龍蝦大腦獨立面板
 
 如果你只是想快速把介面叫出來，不想每次手動打網址：
 
@@ -29,7 +30,9 @@ npm run office:open
 ## `/office` 現況
 
 - `/office` 現在只保留 Boss Inbox 與治理操作。
+- 龍蝦大腦完整進度面板已拆到 `/office/openclaw`，避免和老闆收件匣資訊混在一起。
 - 舊的 Legacy Office realtime 面板已移出主入口，原因是部署站 gateway 未連到真實 OpenClaw runtime，保留在主畫面只會長期降級。
+- Telegram 公網入口現在由 Office 擁有：`https://copilot.bw-space.com/api/telegram/webhook`。`幫我完成：...` 會直接進 formal workflow，其他聊天再轉交本機 gateway webhook。
 - 寫入與治理操作可用 `OFFICE_ADMIN_TOKEN` 搭配 `x-office-token`，或先透過 `/api/office/session` 建立瀏覽器 session。
 
 ## 主要腳本
@@ -43,6 +46,7 @@ npm run superfish:go-live
 npm run superfish:webhook
 npm run superfish:sync-rich-menu
 npm run test:fnb
+npm run test:workflow
 npm run build
 ```
 
@@ -66,6 +70,12 @@ npm run test:e2e:report
 - `FNB_PUBLIC_BASE_URL`
 - `FNB_INTERNAL_API_TOKEN`
 - `OFFICE_ADMIN_TOKEN`（設了之後，Office 寫入 API 需要 `x-office-token` 或 `/api/office/session` cookie）
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `TELEGRAM_WEBHOOK_URL`
+- `TELEGRAM_WEBHOOK_PATH`
+- `TELEGRAM_WEBHOOK_HOST`
+- `TELEGRAM_WEBHOOK_PORT`
 - `FNB_APP_ENV`
 - `FNB_DEMO_MODE`
 - `DATABASE_URL`（有值時走 Postgres，否則 SQLite）

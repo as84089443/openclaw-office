@@ -23,6 +23,7 @@ import {
   fixPlaceholderEvents,
   repairAllPlaceholderEvents,
   createTask,
+  ensurePrimaryTask,
   updateTask,
   getTaskById,
   getTaskByRequestId,
@@ -41,6 +42,10 @@ import { gatewayCall } from '../../../lib/gateway-rpc.js'
 import { getAgentsMap, resolveAgentId } from '../../../lib/config.js'
 import { pickAutonomousWorkerAgent } from '../../../lib/autonomous-handoff.js'
 import {
+  buildWorkflowSidecarSessionKey,
+  resolveWorkflowDispatchSessionKey,
+} from '../../../lib/dispatch-session-key.js'
+import {
   DEFAULT_OFFICE_INTERNAL_BASE_URL,
   extractTaskVerificationUrl,
   hasGstackBrowseBinary,
@@ -58,6 +63,8 @@ function timeStr() {
 }
 
 function createEvent(requestId, state, agent, message, extra = {}) {
+  if (requestId && !getRequestById(requestId)) return null
+
   const event = {
     id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     requestId,
@@ -73,6 +80,18 @@ function createEvent(requestId, state, agent, message, extra = {}) {
   addEvent(event)
   eventBus.emit(EVENTS.WORKFLOW_EVENT, event)
   return event
+}
+
+const WORKFLOW_SYNC_MODE = process.env.OPENCLAW_WORKFLOW_SYNC === '1'
+
+async function runPendingAction(task, now, logLabel) {
+  if (!task) return null
+  if (isTestLikeRuntime()) return task
+  if (WORKFLOW_SYNC_MODE) return executePendingAction(task, now)
+  void executePendingAction(task, now).catch((error) => {
+    console.error(`[workflow] ${logLabel} failed:`, error?.message || error)
+  })
+  return task
 }
 
 function isPrimaryTask(task) {
@@ -228,6 +247,12 @@ function needsContinuationFromText(text = '') {
   return /(還沒做|還未做|下一步|還剩|可再補|接著做|繼續做|後續再做|待處理|待補|之後處理)/.test(normalized)
 }
 
+function hasConsultantStopSignal(text = '') {
+  const normalized = String(text || '').trim()
+  if (!normalized) return false
+  return /(如果你要|如果需要|要不要我幫你|要不要我|建議下一步|建議是下一步|我下一則就|我可以下一步|我可以再幫你)/.test(normalized)
+}
+
 function needsRootCauseFollowup({ success = true, body = {}, task = null } = {}) {
   if (success) return false
   if (body?.stopAfterFailure === true || body?.noFollowup === true) return false
@@ -244,32 +269,8 @@ function needsRootCauseFollowup({ success = true, body = {}, task = null } = {})
   return /(待查|待釐清|待確認|需要調查|需要驗證|需要複盤|追根究底|根因|再跑一次|替代方案)/.test(followupSignal)
 }
 
-function buildBoundAgentSessionKey(agentId) {
-  const resolvedAgentId = String(agentId || 'main').trim() || 'main'
-  const bindings = Array.isArray(AGENTS[resolvedAgentId]?.bindings)
-    ? AGENTS[resolvedAgentId].bindings
-    : []
-
-  for (const binding of bindings) {
-    const raw = String(binding || '').trim()
-    if (!raw) continue
-    const [channelPart, peerPart] = raw.split(/\s+/, 2)
-    if (!channelPart || !peerPart) continue
-    const channel = String(channelPart).trim()
-    const colonIndex = peerPart.indexOf(':')
-    if (colonIndex <= 0 || colonIndex === peerPart.length - 1) continue
-    const peerKind = peerPart.slice(0, colonIndex).trim()
-    const peerId = peerPart.slice(colonIndex + 1).trim()
-    if (!channel || !peerKind || !peerId) continue
-    return `agent:${resolvedAgentId}:${channel}:${peerKind}:${peerId}`
-  }
-
-  throw new Error(`Agent ${resolvedAgentId} has no valid channel binding for workflow dispatch`)
-}
-
 function buildTaskSessionKey(task) {
-  const agentId = String(task?.assignedAgent || 'main').trim() || 'main'
-  return buildBoundAgentSessionKey(agentId)
+  return resolveWorkflowDispatchSessionKey(task)
 }
 
 function buildTaskDispatchMessage(task, { continuation = false } = {}) {
@@ -282,11 +283,15 @@ function buildTaskDispatchMessage(task, { continuation = false } = {}) {
   const suggestedSubagents = delegation.suggestedSubagents.filter(Boolean)
   const rootCause = cleanContent(task?.rootCause || '')
   const evolutionNote = cleanContent(task?.evolutionNote || '')
+  const researchOperator = isResearchOperatorTask(task)
   const lines = [
     '你現在是在 OpenClaw Office 的正式任務執行流程中。',
     continuation
       ? '這是一個 continuation。請依上一輪回報與未完成項目直接續跑，不要停在整理建議。'
       : '請直接開工並盡量自主完成交辦事項，不要只停在規劃或諮詢。',
+    isChildTask(task) ? `子任務 taskId：${task?.id || 'unknown'}` : null,
+    task?.requestId ? `對應 requestId：${task.requestId}` : null,
+    task?.parentTaskId ? `parentTaskId：${task.parentTaskId}` : null,
     `任務標題：${title}`,
     detail && detail !== title ? `任務內容：${detail}` : null,
     milestone ? `目前里程碑：${milestone}` : null,
@@ -302,22 +307,24 @@ function buildTaskDispatchMessage(task, { continuation = false } = {}) {
     suggestedSubagents.length ? `建議優先使用的 subagents / reviewer：${suggestedSubagents.join(' / ')}` : null,
     delegation.nextHandoff ? `委派交接點：${delegation.nextHandoff}` : null,
     evolutionNote ? `最近演化備註：${evolutionNote}` : null,
+    researchOperator ? '研究魚 strict operator 規則：不要回「如果你要 / 要不要我幫你 / 建議下一步」。低風險項目請直接續跑、派工、驗證。' : null,
+    researchOperator ? '研究魚對外輸出只允許三種：已交辦 ACK、里程碑進度、完成/阻塞報告。' : null,
     '執行要求：',
     '1. 追到根因，不要只做表面修補。',
     '2. 能安全落地的就直接落地，只有高風險、不可逆、或需要老闆決策的項目才停下。',
     '3. 如需要專長或平行驗證，優先自行使用可用的 subagent / reviewer 能力，不要把任務丟回來等指示。',
     '4. 發現可安全吸收成規則、自動化、檢查點、或 guardrail 的改進時，順手提出或實作。',
     '5. 回報完成或卡住時，請一併提供：summary、nextStep、rootCause、blockers、openLoops、delegation.suggestedSubagents、evolutionNote。',
+    researchOperator ? '6. 若這輪研究已收斂出後續 owner，請直接建立或推進 downstream child tasks，不要停在建議文字。' : null,
     continuation
-      ? '6. 請把這個任務收斂到新的可交付結果，並延續既有 session 脈絡。'
-      : '6. 請從現在開始一路推進到可交付結果。',
+      ? '7. 請把這個任務收斂到新的可交付結果，並延續既有 session 脈絡。'
+      : '7. 請從現在開始一路推進到可交付結果。',
   ]
   return lines.filter(Boolean).join('\n\n')
 }
 
 function buildSidecarSessionKey(task, sidecarAgentId) {
-  const resolvedAgentId = String(sidecarAgentId || 'unknown').trim() || 'unknown'
-  return buildBoundAgentSessionKey(resolvedAgentId)
+  return buildWorkflowSidecarSessionKey(task, sidecarAgentId)
 }
 
 function buildSidecarDispatchMessage(task, sidecarAgentId, { reason = 'continuation-review' } = {}) {
@@ -397,11 +404,23 @@ async function dispatchSidecarReviewers(task, { reason = 'continuation-review', 
   if (!task?.id) return task
   if (!isPrimaryTask(task)) return task
 
+  // 防重複派送守護：若此 task 的 sidecarDispatches 已有任何 completed/failed（含 auto-closed）記錄
+  // 代表 reviewer 已嘗試過，無論結果如何都不再重派，避免無限循環
+  const pastDispatches = (task.delegationPlan?.sidecarDispatches || [])
+  const alreadyAttempted = pastDispatches.some(
+    (d) => d.status === 'completed' || d.status === 'failed'
+  )
+  if (alreadyAttempted) {
+    console.log(`[dispatchSidecarReviewers] skip re-dispatch for ${task.id}: alreadyAttempted=true (${pastDispatches.length} past dispatches)`)
+    return task
+  }
+
   const delegation = normalizeDelegationPlan(task?.delegationPlan || {}, task, now)
   if (delegation.allowSubagents === false) return task
 
   const sidecarAgents = pickSidecarAgents(task, { reason, now })
   if (sidecarAgents.length === 0) return task
+
 
   const existingChildren = getChildTasks(task.id, 100)
   const sidecarDispatches = []
@@ -720,7 +739,7 @@ async function handleSidecarCompletion(task, { agent, result, success = true, bo
     now: completedAt,
     persistRule: shouldPersistRule,
   }) || currentParentSnapshot
-  if (shouldWakePrimary && updatedTask) {
+  if (shouldWakePrimary && updatedTask && !isTestLikeRuntime()) {
     void executePendingAction(updatedTask, completedAt).catch((error) => {
       console.error('[workflow] sidecar continuation dispatch failed:', error?.message || error)
     })
@@ -729,9 +748,29 @@ async function handleSidecarCompletion(task, { agent, result, success = true, bo
   return updatedTask
 }
 
+function buildTestRuntimeDispatch(task, { continuation = false, now = Date.now() } = {}) {
+  const sessionKey = buildTaskSessionKey(task)
+  const runId = `test-dispatch-${task?.id || crypto.randomUUID()}-${continuation ? 'continue' : 'start'}`
+  return {
+    accepted: {
+      ok: true,
+      testRuntime: true,
+      runId,
+      sessionKey,
+    },
+    runId,
+    sessionKey,
+    dispatchedAt: now,
+  }
+}
+
 async function dispatchTaskToAgent(task, { continuation = false, now = Date.now() } = {}) {
   if (!task?.assignedAgent) {
     throw new Error(`Task ${task?.id || 'unknown'} has no assigned agent`)
+  }
+
+  if (isTestLikeRuntime()) {
+    return buildTestRuntimeDispatch(task, { continuation, now })
   }
 
   if (isGstackBrowseAgent(task.assignedAgent)) {
@@ -741,7 +780,7 @@ async function dispatchTaskToAgent(task, { continuation = false, now = Date.now(
     })
   }
 
-  const sessionKey = task.dispatchSessionKey || buildTaskSessionKey(task)
+  const sessionKey = buildTaskSessionKey(task)
   const message = buildTaskDispatchMessage(task, { continuation })
   const idempotencyKey = crypto.randomUUID()
   const accepted = await gatewayCall(
@@ -769,6 +808,8 @@ async function executePendingAction(task, now = Date.now()) {
   if (!isPrimaryTask(task)) return null
 
   let governedTask = refreshPrimaryTaskIntelligence(task.id, { now }) || task
+  if (!governedTask?.id) return null
+  if (governedTask.requestId && !getRequestById(governedTask.requestId)) return null
 
   if (governedTask.pendingAction === 'start_work') {
     if (normalizeRiskTier(governedTask.riskTier) === 'irreversible') {
@@ -828,6 +869,7 @@ async function executePendingAction(task, now = Date.now()) {
       const patched = updateTask(governedTask.id, {
         milestone: '派工失敗',
         nextStep: `等待自動重試：${message}`,
+        retryCount: Number(governedTask.retryCount || 0) + 1,
         continuationRequired: true,
         pendingAction: 'start_work',
         continuationCheckedAt: now,
@@ -859,6 +901,67 @@ async function executePendingAction(task, now = Date.now()) {
   }
 
   if (governedTask.pendingAction === 'continue_after_reply') {
+    const activeReviewerChildren = getActiveReviewerChildren(governedTask)
+    const activeResearchFollowups = getActiveResearchFollowupChildren(governedTask)
+    if (
+      activeReviewerChildren.length > 0
+      && (!governedTask.humanGateReason || isAutoGeneratedHumanGateReason(governedTask.humanGateReason))
+    ) {
+      const waitingTask = updateTask(governedTask.id, {
+        milestone: '等待 reviewer / verifier',
+        nextStep: '先等 reviewer / verifier 結果回流，再決定是否續跑主線',
+        continuationRequired: true,
+        pendingAction: 'continue_after_reply',
+        continuationCheckedAt: now,
+        completionGateRequired: false,
+        humanGateReason: null,
+        autoContinueAllowed: normalizeRiskTier(governedTask.riskTier) !== 'irreversible',
+        lastUpdate: governedTask.lastUpdate || now,
+        ...buildTaskMemoryPatchFromBody(governedTask, {}, {
+          mode: 'execution',
+          focus: '先等 reviewer / verifier 結果回流',
+          summary: '目前已有 reviewer / verifier 在背景執行，等結果回流後再決定主線下一步。',
+          nextCheckpoint: '等待 reviewer / verifier 回報',
+          openLoops: ['等待 reviewer / verifier 結果'],
+          updatedBy: 'workflow-governor',
+        }, now),
+      }) || governedTask
+      emitTaskUpdate(waitingTask.id)
+      return waitingTask
+    }
+
+    if (
+      activeResearchFollowups.length > 0
+      && (!governedTask.humanGateReason || isAutoGeneratedHumanGateReason(governedTask.humanGateReason))
+    ) {
+      const waitingTask = updateTask(governedTask.id, {
+        milestone: '等待 downstream follow-up',
+        nextStep: '先等 downstream child tasks 回流，再自動續跑研究主線',
+        continuationRequired: true,
+        pendingAction: 'continue_after_reply',
+        continuationCheckedAt: now,
+        completionGateRequired: false,
+        humanGateReason: null,
+        autoContinueAllowed: normalizeRiskTier(governedTask.riskTier) !== 'irreversible',
+        lastUpdate: governedTask.lastUpdate || now,
+        ...buildTaskMemoryPatchFromBody(governedTask, {}, {
+          mode: 'execution',
+          focus: '先等 downstream child tasks 結果回流',
+          summary: '研究題已自動派工，等 follow-up child tasks 回流後再決定下一步。',
+          nextCheckpoint: '等待 downstream child tasks 回報',
+          openLoops: ['等待 downstream child tasks 結果'],
+          delegation: {
+            currentStatus: 'delegating',
+            nextAutoStep: '等待 downstream child tasks 回流後自動續跑',
+            delegatedAgents: activeResearchFollowups.map((child) => child.assignedAgent),
+          },
+          updatedBy: 'workflow-governor',
+        }, now),
+      }) || governedTask
+      emitTaskUpdate(waitingTask.id)
+      return waitingTask
+    }
+
     if (Number(governedTask.retryBudget || 0) >= 0 && Number(governedTask.retryCount || 0) >= Number(governedTask.retryBudget || 0)) {
       const gated = enforceHumanGate(
         governedTask,
@@ -880,8 +983,14 @@ async function executePendingAction(task, now = Date.now()) {
     }
 
     const consensus = governedTask.consensus || buildTaskConsensus(governedTask)
+    // 若 sidecarDispatches 中已有任何 completed 紀錄（包含 auto-closed），視為 reviewer coverage 已滿足
+    // 避免：auto-close sidecar → executePendingAction → needsReviewerCoverage → 重派 sidecar → 無限循環
+    const alreadyHadSidecarAttempt = (governedTask.delegationPlan?.sidecarDispatches || []).some(
+      (d) => d.status === 'completed' || d.status === 'failed'
+    )
     const needsReviewerCoverage = ['medium', 'high', 'irreversible'].includes(normalizeRiskTier(governedTask.riskTier))
       && Number(governedTask.reviewerResults?.length || 0) === 0
+      && !alreadyHadSidecarAttempt
 
     if (needsReviewerCoverage) {
       let blockedTask = await ensureReviewerCoverage(governedTask, { reason: 'continuation-review', now })
@@ -906,7 +1015,7 @@ async function executePendingAction(task, now = Date.now()) {
       return blockedTask
     }
 
-    if (consensus.requiresThirdReviewer || consensus.status === 'needs_more_review') {
+    if (!alreadyHadSidecarAttempt && (consensus.requiresThirdReviewer || consensus.status === 'needs_more_review')) {
       let blockedTask = await dispatchSidecarReviewers(governedTask, { reason: 'root-cause', now })
       blockedTask = await dispatchGstackVerifier(blockedTask || governedTask, { reason: 'root-cause', now })
       blockedTask = updateTask((blockedTask || governedTask).id, {
@@ -948,7 +1057,6 @@ async function executePendingAction(task, now = Date.now()) {
         nextStep: '已依未完事項續跑，等待代理收斂新的可交付結果',
         dispatchSessionKey: dispatch.sessionKey,
         dispatchRunId: dispatch.runId,
-        retryCount: Number(governedTask.retryCount || 0) + 1,
         continuationRequired: false,
         pendingAction: null,
         continuationCheckedAt: now,
@@ -989,6 +1097,7 @@ async function executePendingAction(task, now = Date.now()) {
       const patched = updateTask(governedTask.id, {
         milestone: '續跑派送失敗',
         nextStep: `等待自動重試：${message}`,
+        retryCount: Number(governedTask.retryCount || 0) + 1,
         continuationRequired: true,
         pendingAction: 'continue_after_reply',
         continuationCheckedAt: now,
@@ -1069,9 +1178,13 @@ const CONTINUATION_CHECK_MS = 45 * 1000
 const COMPLETION_GATE_CHECK_MS = 2 * 60 * 1000
 const SIDECAR_REDISPATCH_WINDOW_MS = 10 * 60 * 1000
 
-if (!globalThis.__officeStaleTaskMonitorStarted) {
+function isTestLikeRuntime() {
+  return process.env.NODE_ENV === 'test' || process.env.OPENCLAW_OFFICE_DISABLE_BACKGROUND_CONTINUATIONS === '1'
+}
+
+if (!globalThis.__officeStaleTaskMonitorStarted && !isTestLikeRuntime()) {
   globalThis.__officeStaleTaskMonitorStarted = true
-  setInterval(async () => {
+  const staleTaskMonitor = setInterval(async () => {
     try {
       const now = Date.now()
       const tasks = getActiveTasks(100)
@@ -1119,6 +1232,7 @@ if (!globalThis.__officeStaleTaskMonitorStarted) {
       console.error('[workflow] stale task monitor failed:', error.message)
     }
   }, STALE_TASK_SCAN_INTERVAL_MS)
+  staleTaskMonitor.unref?.()
 }
 
 // Keep request.state in sync with task.status for backward compatibility
@@ -1205,6 +1319,106 @@ function toStringArray(value) {
 
 function mergeStringArray(existing = [], incoming = []) {
   return Array.from(new Set([...toStringArray(existing), ...toStringArray(incoming)]))
+}
+
+const DEFAULT_RESEARCH_DOWNSTREAM_MATRIX = {
+  implementation: ['dev-fish'],
+  validation: ['qa'],
+  rootCause: ['analyst'],
+  governance: ['admin'],
+  verifier: ['gstack-browse'],
+}
+
+function normalizeResearchLoop(value, fallback = null) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'proactive') return 'proactive'
+  if (normalized === 'reactive') return 'reactive'
+  return fallback
+}
+
+function normalizeOperatorMode(value, fallback = null) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'strict') return 'strict'
+  return fallback
+}
+
+function normalizeAutonomyPolicy(value, fallback = null) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'no_prompt_until_human_gate') return 'no_prompt_until_human_gate'
+  return fallback
+}
+
+function normalizeOutputContract(value, fallback = null) {
+  const normalized = String(value || '').trim()
+  if (!normalized) return fallback
+  return normalized
+}
+
+function normalizeDownstreamMatrix(matrix = {}) {
+  const normalized = {}
+  for (const [key, defaults] of Object.entries(DEFAULT_RESEARCH_DOWNSTREAM_MATRIX)) {
+    normalized[key] = mergeStringArray(defaults, matrix?.[key] || [])
+      .map((agentId) => resolveAgentId(agentId))
+      .filter(Boolean)
+  }
+  return normalized
+}
+
+function getResearchOperatorMeta(task = {}, body = {}) {
+  const brain = task?.brainState || {}
+  const delegation = task?.delegationPlan || {}
+  return {
+    researchLoop: normalizeResearchLoop(
+      body?.researchLoop
+      || task?.researchLoop
+      || brain?.researchLoop
+      || delegation?.researchLoop,
+      null,
+    ),
+    operatorMode: normalizeOperatorMode(
+      body?.operatorMode
+      || task?.operatorMode
+      || brain?.operatorMode
+      || delegation?.operatorMode,
+      null,
+    ),
+    autonomyPolicy: normalizeAutonomyPolicy(
+      body?.autonomyPolicy
+      || task?.autonomyPolicy
+      || brain?.autonomyPolicy
+      || delegation?.autonomyPolicy,
+      null,
+    ),
+    outputContract: normalizeOutputContract(
+      body?.outputContract
+      || task?.outputContract
+      || brain?.outputContract
+      || delegation?.outputContract,
+      null,
+    ),
+    scope: sanitizeTextValue(
+      body?.scope
+      || task?.scope
+      || brain?.scope
+      || delegation?.scope,
+    ),
+    downstreamMatrix: normalizeDownstreamMatrix(
+      body?.downstreamMatrix
+      || body?.delegationPlan?.downstreamMatrix
+      || task?.downstreamMatrix
+      || delegation?.downstreamMatrix
+      || {},
+    ),
+  }
+}
+
+function isResearchOperatorTask(task = {}, body = {}) {
+  const meta = getResearchOperatorMeta(task, body)
+  const assignedAgent = resolveAgentId(body?.agent || task?.assignedAgent)
+  return assignedAgent === 'research-fish'
+    || meta.operatorMode === 'strict'
+    || meta.outputContract === 'research_operator_v1'
+    || Boolean(meta.researchLoop)
 }
 
 function normalizeSidecarDispatch(entry = {}) {
@@ -1296,12 +1510,255 @@ function buildSidecarTaskSeed(parentTask, sidecarAgentId, { reason = 'continuati
   }
 }
 
+function inferResearchDelegationKinds(task, body = {}) {
+  const meta = getResearchOperatorMeta(task, body)
+  const text = [
+    task?.title,
+    task?.detail,
+    body?.summary,
+    body?.nextStep,
+    body?.rootCause,
+    ...(body?.blockers || []),
+    ...(body?.openLoops || []),
+  ].filter(Boolean).join('\n')
+  const kinds = new Set()
+
+  if (meta.scope === 'fleet' || /routing|handoff|workflow|dashboard|governance|治理|設定|policy|權限|config/i.test(text)) {
+    kinds.add('governance')
+    kinds.add('rootCause')
+  }
+  if (/驗證|verify|verification|qa|測試|smoke|dogfood|browser|巡檢|check/i.test(text)) {
+    kinds.add('validation')
+    kinds.add('verifier')
+  }
+  if (/根因|diagnos|追根因|why|trace|schema drift|root cause/i.test(text)) {
+    kinds.add('rootCause')
+  }
+  if (/實作|修復|修正|build|implement|feature|功能|開發|patch|route|ui|頁面|workflow/i.test(text)) {
+    kinds.add('implementation')
+  }
+
+  if (kinds.size === 0) {
+    if (meta.scope === 'feature' || meta.scope === 'application') kinds.add('implementation')
+    else if (meta.scope === 'fleet') kinds.add('governance')
+    else kinds.add('implementation')
+  }
+
+  return [...kinds]
+}
+
+function pickResearchDelegatedAgents(task, body = {}) {
+  const meta = getResearchOperatorMeta(task, body)
+  const explicitAgents = mergeStringArray(
+    body?.delegatedAgents || body?.delegationTargets,
+    body?.delegation?.delegatedAgents || body?.delegation?.targets || body?.suggestedSubagents || body?.delegation?.suggestedSubagents,
+  )
+    .map((agentId) => resolveAgentId(agentId))
+    .filter((agentId) => agentId && agentId !== task?.assignedAgent)
+
+  if (explicitAgents.length > 0) return explicitAgents
+
+  const kinds = inferResearchDelegationKinds(task, body)
+  const matrix = meta.downstreamMatrix || DEFAULT_RESEARCH_DOWNSTREAM_MATRIX
+  const agents = new Set()
+  for (const kind of kinds) {
+    for (const agentId of matrix[kind] || []) {
+      const resolved = resolveAgentId(agentId)
+      if (!resolved || resolved === task?.assignedAgent) continue
+      agents.add(resolved)
+    }
+  }
+  return [...agents]
+}
+
+function buildResearchFollowupTaskSeed(parentTask, assignedAgent, { reason = 'research_followup', now = Date.now() } = {}) {
+  const parentTitle = cleanContent(parentTask?.title || parentTask?.detail || parentTask?.id || '未命名研究題')
+  const agentName = AGENTS[assignedAgent]?.name || assignedAgent
+  return {
+    requestId: parentTask?.requestId || null,
+    parentTaskId: parentTask?.id || null,
+    rootTaskId: parentTask?.rootTaskId || parentTask?.id || null,
+    taskType: 'worker_subtask',
+    sourceAgent: parentTask?.assignedAgent || 'research-fish',
+    mergePolicy: assignedAgent === 'qa' ? 'blocking_review' : 'advisory',
+    graphDepth: Number(parentTask?.graphDepth || 0) + 1,
+    title: `跟進派工｜${agentName}｜${parentTitle}`.slice(0, 120),
+    detail: `${agentName} 針對研究題「${parentTitle}」承接正式 follow-up，請直接把可落地工作推進到可驗證結果。`,
+    assignedAgent,
+    status: 'assigned',
+    brainMode: 'queued',
+    brainState: {
+      objective: `承接研究 follow-up：${parentTitle}`,
+      focus: '把研究結論轉成可落地工作、驗證或治理調整',
+      summary: `${agentName} 已被研究魚正式派工。`,
+      nextCheckpoint: '回報 follow-up 的第一個可驗證里程碑',
+      openLoops: ['等待 downstream follow-up 回報'],
+      evidence: [`research follow-up reason: ${reason}`],
+      updatedBy: 'workflow-research-delegator',
+    },
+    delegationPlan: {
+      primaryAgent: parentTask?.assignedAgent || 'research-fish',
+      currentStatus: 'queued',
+      reviewerMode: 'research-followup',
+      nextHandoff: '回報 follow-up 結果給研究主線',
+      notes: '這是 research-fish 自動建立的 downstream child task。',
+    },
+    riskTier: assignedAgent === 'qa' ? 'medium' : maxRiskTier(parentTask?.riskTier || inferRiskTierFromTask(parentTask), 'low'),
+    retryBudget: 1,
+    autoContinueAllowed: false,
+    autoApplyAllowed: false,
+    createdAt: now,
+    lastUpdate: now,
+  }
+}
+
+async function dispatchResearchFollowupTasks(task, body = {}, now = Date.now()) {
+  if (!task?.id || !isPrimaryTask(task) || !isResearchOperatorTask(task, body)) return task
+
+  const delegatedAgents = pickResearchDelegatedAgents(task, body)
+  if (delegatedAgents.length === 0) return task
+
+  const existingChildren = getChildTasks(task.id, 100)
+  const dispatchedAgents = []
+  const sidecarDispatches = []
+
+  for (const delegatedAgent of delegatedAgents) {
+    if (delegatedAgent === 'gstack-browse') continue
+    let childTask = existingChildren.find((entry) => (
+      entry.assignedAgent === delegatedAgent
+      && entry.taskType === 'worker_subtask'
+      && !['completed', 'failed'].includes(String(entry.status || '').toLowerCase())
+    )) || null
+    const seed = buildResearchFollowupTaskSeed(task, delegatedAgent, {
+      reason: body?.nextStep || body?.summary || 'research_followup',
+      now,
+    })
+    if (!childTask) {
+      childTask = createTask(seed)
+      existingChildren.push(childTask)
+    } else {
+      childTask = updateTask(childTask.id, {
+        ...seed,
+        createdAt: childTask.createdAt,
+        status: 'assigned',
+        completedAt: null,
+        result: null,
+      }) || childTask
+    }
+    emitTaskUpdate(childTask.id)
+
+    try {
+      const dispatch = await dispatchTaskToAgent(childTask, { continuation: false, now })
+      childTask = updateTask(childTask.id, {
+        status: 'in_progress',
+        startedAt: childTask.startedAt || now,
+        dispatchSessionKey: dispatch.sessionKey,
+        dispatchRunId: dispatch.runId,
+        lastUpdate: now,
+        ...buildTaskMemoryPatchFromBody(childTask, {}, {
+          mode: 'execution',
+          focus: '承接 research follow-up，直接往可落地結果推進',
+          summary: `${AGENTS[delegatedAgent]?.name || delegatedAgent} 已接手研究後續任務。`,
+          nextCheckpoint: '等待 downstream 任務的第一個里程碑',
+          openLoops: ['等待 downstream follow-up 回報'],
+          evidence: [`research follow-up dispatched ${dispatch.runId}`],
+          delegation: {
+            currentStatus: 'running',
+            reviewerMode: 'research-followup',
+            sessionKey: dispatch.sessionKey,
+            runId: dispatch.runId,
+            nextHandoff: '回報 follow-up 結果給研究主線',
+            notes: 'research-fish 自動派工成功。',
+          },
+          updatedBy: 'workflow-research-delegator',
+        }, now),
+      }) || childTask
+      emitTaskUpdate(childTask.id)
+      dispatchedAgents.push(delegatedAgent)
+      sidecarDispatches.push({
+        agentId: delegatedAgent,
+        taskId: childTask.id,
+        purpose: 'research-followup',
+        status: 'running',
+        sessionKey: dispatch.sessionKey,
+        runId: dispatch.runId,
+        dispatchedAt: dispatch.dispatchedAt || now,
+        updatedAt: now,
+        notes: 'research follow-up 已派工',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      updateTask(childTask.id, {
+        status: 'failed',
+        completedAt: now,
+        result: message,
+        resolutionSource: 'dispatch_failed',
+        lastUpdate: now,
+      })
+      emitTaskUpdate(childTask.id)
+      sidecarDispatches.push({
+        agentId: delegatedAgent,
+        taskId: childTask.id,
+        purpose: 'research-followup',
+        status: 'dispatch_failed',
+        updatedAt: now,
+        notes: message,
+      })
+    }
+  }
+
+  let nextTask = task
+  if (delegatedAgents.includes('gstack-browse')) {
+    nextTask = await dispatchGstackVerifier(task, { reason: 'research-followup', now })
+  }
+
+  const patched = updateTask((nextTask || task).id, {
+    ...buildTaskBrainPatch((nextTask || task), {
+      focus: '研究已收斂一輪，正在把結論轉成正式派工與驗證',
+      summary: body?.summary || (nextTask || task)?.brainState?.summary || '研究魚已完成一輪研究，正在自動派工與驗證。',
+      nextCheckpoint: '等待 downstream child tasks / verifier 回報',
+      openLoops: mergeStringArray((nextTask || task)?.brainState?.openLoops, ['等待 downstream child tasks 回報']),
+      delegation: {
+        currentStatus: dispatchedAgents.length > 0 ? 'delegating' : ((nextTask || task)?.delegationPlan?.currentStatus || 'running'),
+        delegatedAgents: delegatedAgents,
+        sidecarDispatches,
+        nextHandoff: '等待 downstream child tasks / verifier 結果回流',
+        nextAutoStep: '等待 downstream child tasks / verifier 回流後自動續跑',
+        notes: `research-fish 已自動派工：${delegatedAgents.join(' / ')}`,
+      },
+      updatedBy: 'workflow-research-delegator',
+    }, now),
+    milestone: '研究後自動派工',
+    nextStep: '等待 downstream child tasks / verifier 結果回流，再自動續跑研究主線',
+    continuationRequired: true,
+    pendingAction: 'continue_after_reply',
+    continuationCheckedAt: now,
+    completionGateRequired: false,
+    lastUpdate: now,
+  }) || nextTask || task
+  emitTaskUpdate(patched.id)
+  return patched
+}
+
+function getActiveResearchFollowupChildren(task = null) {
+  if (!task?.id) return []
+  return getChildTasks(task.id, 100).filter((child) => (
+    child?.taskType === 'worker_subtask'
+    && !['completed', 'failed'].includes(String(child.status || '').toLowerCase())
+  ))
+}
+
 function normalizeBrainState(state = {}) {
   return {
     objective: sanitizeTextValue(state.objective),
     focus: sanitizeTextValue(state.focus),
     summary: sanitizeTextValue(state.summary),
     nextCheckpoint: sanitizeTextValue(state.nextCheckpoint),
+    scope: sanitizeTextValue(state.scope),
+    researchLoop: normalizeResearchLoop(state.researchLoop, null),
+    operatorMode: normalizeOperatorMode(state.operatorMode, null),
+    autonomyPolicy: normalizeAutonomyPolicy(state.autonomyPolicy, null),
+    outputContract: normalizeOutputContract(state.outputContract, null),
     knownFacts: mergeStringArray([], state.knownFacts),
     blockers: mergeStringArray([], state.blockers),
     openLoops: mergeStringArray([], state.openLoops),
@@ -1316,14 +1773,22 @@ function normalizeDelegationPlan(plan = {}, task = null, now = Date.now()) {
   return {
     primaryAgent: sanitizeTextValue(plan.primaryAgent) || sanitizeTextValue(task?.assignedAgent),
     currentStatus: sanitizeTextValue(plan.currentStatus),
+    researchLoop: normalizeResearchLoop(plan.researchLoop || task?.researchLoop, null),
+    operatorMode: normalizeOperatorMode(plan.operatorMode || task?.operatorMode, null),
+    autonomyPolicy: normalizeAutonomyPolicy(plan.autonomyPolicy || task?.autonomyPolicy, null),
+    outputContract: normalizeOutputContract(plan.outputContract || task?.outputContract, null),
+    scope: sanitizeTextValue(plan.scope || task?.scope),
     sessionKey,
     runId,
     allowSubagents: plan.allowSubagents === undefined ? true : Boolean(plan.allowSubagents),
     reviewerMode: sanitizeTextValue(plan.reviewerMode) || 'verified-delegation',
     suggestedSubagents: mergeStringArray([], plan.suggestedSubagents),
     sidecarDispatches: normalizeSidecarDispatches(plan.sidecarDispatches),
+    downstreamMatrix: normalizeDownstreamMatrix(plan.downstreamMatrix || task?.downstreamMatrix || {}),
+    delegatedAgents: mergeStringArray([], plan.delegatedAgents),
     lastSuggestedDispatchAt: plan.lastSuggestedDispatchAt ?? null,
     nextHandoff: sanitizeTextValue(plan.nextHandoff),
+    nextAutoStep: sanitizeTextValue(plan.nextAutoStep),
     notes: sanitizeTextValue(plan.notes),
     lastDispatchAt: plan.lastDispatchAt ?? ((sessionKey || runId) ? now : null),
   }
@@ -1336,6 +1801,11 @@ function buildTaskBrainPatch(task, patch = {}, now = Date.now()) {
     focus: patch.focus ?? existingBrain.focus,
     summary: patch.summary ?? existingBrain.summary,
     nextCheckpoint: patch.nextCheckpoint ?? existingBrain.nextCheckpoint ?? sanitizeTextValue(task?.nextStep),
+    scope: patch.scope ?? existingBrain.scope,
+    researchLoop: patch.researchLoop ?? existingBrain.researchLoop,
+    operatorMode: patch.operatorMode ?? existingBrain.operatorMode,
+    autonomyPolicy: patch.autonomyPolicy ?? existingBrain.autonomyPolicy,
+    outputContract: patch.outputContract ?? existingBrain.outputContract,
     knownFacts: mergeStringArray(existingBrain.knownFacts, patch.knownFacts),
     blockers: mergeStringArray(existingBrain.blockers, patch.blockers),
     openLoops: mergeStringArray(existingBrain.openLoops, patch.openLoops),
@@ -1349,6 +1819,11 @@ function buildTaskBrainPatch(task, patch = {}, now = Date.now()) {
     ...(patch.delegation || {}),
     suggestedSubagents: mergeStringArray(existingDelegation.suggestedSubagents, patch.delegation?.suggestedSubagents),
     sidecarDispatches: mergeSidecarDispatches(existingDelegation.sidecarDispatches, patch.delegation?.sidecarDispatches),
+    delegatedAgents: mergeStringArray(existingDelegation.delegatedAgents, patch.delegation?.delegatedAgents),
+    downstreamMatrix: {
+      ...(existingDelegation.downstreamMatrix || {}),
+      ...(patch.delegation?.downstreamMatrix || {}),
+    },
   }, task, now)
 
   return {
@@ -1373,6 +1848,11 @@ function buildTaskMemoryPatchFromBody(task, body = {}, fallback = {}, now = Date
     focus: body.focus ?? explicitBrain.focus ?? fallback.focus,
     summary: body.summary ?? explicitBrain.summary ?? fallback.summary,
     nextCheckpoint: body.nextCheckpoint ?? explicitBrain.nextCheckpoint ?? fallback.nextCheckpoint,
+    scope: body.scope ?? explicitBrain.scope ?? fallback.scope,
+    researchLoop: body.researchLoop ?? explicitBrain.researchLoop ?? fallback.researchLoop,
+    operatorMode: body.operatorMode ?? explicitBrain.operatorMode ?? fallback.operatorMode,
+    autonomyPolicy: body.autonomyPolicy ?? explicitBrain.autonomyPolicy ?? fallback.autonomyPolicy,
+    outputContract: body.outputContract ?? explicitBrain.outputContract ?? fallback.outputContract,
     knownFacts: mergeStringArray(explicitBrain.knownFacts, fallback.knownFacts || body.knownFacts),
     blockers: mergeStringArray(explicitBrain.blockers, fallback.blockers || body.blockers),
     openLoops: mergeStringArray(explicitBrain.openLoops, fallback.openLoops || body.openLoops),
@@ -1387,6 +1867,20 @@ function buildTaskMemoryPatchFromBody(task, body = {}, fallback = {}, now = Date
         fallback.delegation?.suggestedSubagents,
         explicitDelegation.suggestedSubagents || body.suggestedSubagents,
       ),
+      delegatedAgents: mergeStringArray(
+        fallback.delegation?.delegatedAgents,
+        explicitDelegation.delegatedAgents || body.delegatedAgents,
+      ),
+      downstreamMatrix: explicitDelegation.downstreamMatrix
+        || fallback.delegation?.downstreamMatrix
+        || body.downstreamMatrix
+        || null,
+      researchLoop: explicitDelegation.researchLoop ?? fallback.delegation?.researchLoop ?? body.researchLoop,
+      operatorMode: explicitDelegation.operatorMode ?? fallback.delegation?.operatorMode ?? body.operatorMode,
+      autonomyPolicy: explicitDelegation.autonomyPolicy ?? fallback.delegation?.autonomyPolicy ?? body.autonomyPolicy,
+      outputContract: explicitDelegation.outputContract ?? fallback.delegation?.outputContract ?? body.outputContract,
+      scope: explicitDelegation.scope ?? fallback.delegation?.scope ?? body.scope,
+      nextAutoStep: explicitDelegation.nextAutoStep ?? fallback.delegation?.nextAutoStep ?? body.nextAutoStep,
       sessionKey: explicitDelegation.sessionKey ?? fallback.delegation?.sessionKey ?? task?.dispatchSessionKey,
       runId: explicitDelegation.runId ?? fallback.delegation?.runId ?? task?.dispatchRunId,
     },
@@ -1592,6 +2086,31 @@ function rankSeverity(value) {
   return 0
 }
 
+function isAutoGeneratedHumanGateReason(reason = '') {
+  const normalized = String(reason || '').trim()
+  return normalized === '不可逆操作需要老闆確認後才能執行。'
+    || normalized === 'reviewer / verifier 要求人工核准。'
+    || /已達 retry budget/i.test(normalized)
+}
+
+function getActiveReviewerChildren(task = null) {
+  if (!task?.id) return []
+  const SIDECAR_TIMEOUT_MS = 30 * 60 * 1000 // 30 分鐘超時
+  const now = Date.now()
+  return getChildTasks(task.id, 100).filter((child) => {
+    const statusStr = String(child.status || '').toLowerCase()
+    // 排除已完成或失敗
+    if (['completed', 'failed'].includes(statusStr)) return false
+    // 排除 auto-closed 標記（summary 或 milestone 含 [auto-closed]）
+    const summaryStr = String(child.summary || '') + String(child.milestone || '')
+    if (summaryStr.includes('[auto-closed]')) return false
+    // 排除超過 30 分鐘仍未完成的殭屍 sidecar
+    const createdMs = child.createdAt ? new Date(child.createdAt).getTime() : 0
+    if (createdMs > 0 && (now - createdMs) > SIDECAR_TIMEOUT_MS) return false
+    return ['sidecar_review', 'verifier'].includes(String(child.taskType || ''))
+  })
+}
+
 function buildTaskConsensus(task = {}, incomingResults = []) {
   const reviewerResults = mergeReviewerResults(task.reviewerResults || [], incomingResults)
   const blockingResults = reviewerResults.filter((entry) => rankSeverity(entry.severity) >= 2)
@@ -1775,16 +2294,20 @@ function refreshPrimaryTaskIntelligence(taskId, { now = Date.now(), persistRule 
   const riskTier = inferRiskTierFromTask(task)
   const retryBudget = Number.isFinite(task.retryBudget) ? Number(task.retryBudget) : defaultRetryBudgetForRiskTier(riskTier)
   const retryCount = Number(task.retryCount || 0)
+  const activeReviewerChildren = getActiveReviewerChildren(task)
+  const manualHumanGateReason = task.humanGateReason && !isAutoGeneratedHumanGateReason(task.humanGateReason)
+    ? task.humanGateReason
+    : null
   const escalationLevel = Math.max(
     Number(task.escalationLevel || 0),
     consensus.status === 'blocked' ? 1 : 0,
     consensus.status === 'conflict' || consensus.status === 'needs_more_review' ? 2 : 0,
     normalizeRiskTier(riskTier) === 'irreversible' ? 3 : 0,
   )
-  const humanGateReason = task.humanGateReason
+  const humanGateReason = manualHumanGateReason
     || (normalizeRiskTier(riskTier) === 'irreversible' ? '不可逆操作需要老闆確認後才能執行。' : null)
     || (consensus.humanApprovalRequired ? 'reviewer / verifier 要求人工核准。' : null)
-    || (retryCount >= retryBudget && retryBudget >= 0 ? '已達 retry budget，先停下來讓老闆決定。' : null)
+    || (retryCount >= retryBudget && retryBudget >= 0 && activeReviewerChildren.length === 0 ? '已達 retry budget，先停下來讓老闆決定。' : null)
   const autoContinueAllowed = normalizeRiskTier(riskTier) !== 'irreversible' && !humanGateReason
   const autoApplyAllowed = normalizeRiskTier(riskTier) === 'low'
   const reusableRule = deriveReusableRuleCandidate(task, consensus)
@@ -2014,6 +2537,12 @@ async function ensureReviewerCoverage(task, { reason = 'continuation-review', no
   const riskTier = normalizeRiskTier(task.riskTier || inferRiskTierFromTask(task))
   if (!['medium', 'high', 'irreversible'].includes(riskTier)) return task
 
+  // 若已有過 sidecar attempt（無論成功或 auto-closed），不再重派，避免無限循環
+  const alreadyHadSidecarAttempt = (task.delegationPlan?.sidecarDispatches || []).some(
+    (d) => d.status === 'completed' || d.status === 'failed'
+  )
+  if (alreadyHadSidecarAttempt) return task
+
   const reviewerCount = Array.isArray(task.reviewerResults) ? task.reviewerResults.length : 0
   const childTasks = getChildTasks(task.id, 100)
   const activeReviewers = childTasks.filter((child) => (
@@ -2029,7 +2558,8 @@ async function ensureReviewerCoverage(task, { reason = 'continuation-review', no
 }
 
 function enforceHumanGate(task, reason, { now = Date.now(), keepPendingAction = true } = {}) {
-  return updateTask(task.id, {
+  const patched = updateTask(task.id, {
+    status: 'blocked',
     milestone: '等待人工 gate',
     nextStep: reason,
     continuationRequired: keepPendingAction,
@@ -2051,6 +2581,8 @@ function enforceHumanGate(task, reason, { now = Date.now(), keepPendingAction = 
       updatedBy: 'workflow-governor',
     }, now),
   }) || getTaskById(task.id)
+  syncRequestStateFromTask(patched)
+  return patched
 }
 
 function closeChildTasksForParent(parentTask, {
@@ -2245,6 +2777,7 @@ export async function POST(request) {
         messageId,
         delegatedTo,
         autonomousHandoff = false,
+        source = 'api',
       } = body
       const attentionMeta = mergeAttentionMeta(body, body.task)
       const deferDispatchUntilIdleMs = Number(body.deferDispatchUntilIdleMs || 0)
@@ -2279,6 +2812,7 @@ export async function POST(request) {
             assignedTo: finalAgent,
             content: content || req.content,
             chainId,
+            source: source || req.source || 'api',
             ...attentionMeta,
           })
           if (content) {
@@ -2299,6 +2833,7 @@ export async function POST(request) {
             content: content || placeholder.content,
             tgMessageId: messageId || null,
             chainId,
+            source: source || placeholder.source || 'api',
             ...attentionMeta,
           })
           if (content) {
@@ -2319,6 +2854,7 @@ export async function POST(request) {
           task: null,
           createdAt: Date.now(),
           tgMessageId: messageId || null,
+          source,
           chainId,
           ...attentionMeta,
         })
@@ -2332,7 +2868,11 @@ export async function POST(request) {
         title: cleanText.slice(0, 80) + (cleanText.length > 80 ? '...' : ''),
         detail: cleanText,
         assignedAgent: finalAgent,
-        nextStep: delegatedTo ? '等待代理開始處理' : '持續處理與回報里程碑',
+        nextStep: delegatedTo
+          ? '等待代理開始處理'
+          : (isResearchOperatorTask({ assignedAgent: finalAgent }, body)
+            ? '先完成研究盤點，接著自動派工 / 驗證 / 續跑'
+            : '持續處理與回報里程碑'),
       }
       const governanceSeed = buildTaskGovernanceDefaults({
         ...taskSeed,
@@ -2342,8 +2882,7 @@ export async function POST(request) {
       const shouldGateBeforeStart = Boolean(governanceSeed.humanGateReason)
       const taskStatus = shouldDispatchViaWorkflow || shouldGateBeforeStart ? 'pending' : 'in_progress'
       const taskStartedAt = shouldDispatchViaWorkflow || shouldGateBeforeStart ? null : Date.now()
-      const task = createTask({
-        requestId: req.id,
+      let task = ensurePrimaryTask(req.id, {
         title: taskSeed.title,
         detail: taskSeed.detail,
         assignedAgent: taskSeed.assignedAgent,
@@ -2359,6 +2898,46 @@ export async function POST(request) {
         ...governanceSeed,
         ...attentionMeta,
       })
+
+      const memorySeed = {
+        mode: autonomousHandoff ? 'autonomous_handoff' : (shouldDispatchViaWorkflow || shouldGateBeforeStart ? 'queued' : 'execution'),
+        objective: cleanText,
+        scope: body.scope || body.brainState?.scope || body.delegationPlan?.scope || null,
+        researchLoop: body.researchLoop || body.brainState?.researchLoop || body.delegationPlan?.researchLoop || null,
+        operatorMode: body.operatorMode || body.brainState?.operatorMode || body.delegationPlan?.operatorMode || null,
+        autonomyPolicy: body.autonomyPolicy || body.brainState?.autonomyPolicy || body.delegationPlan?.autonomyPolicy || null,
+        outputContract: body.outputContract || body.brainState?.outputContract || body.delegationPlan?.outputContract || null,
+        focus: autonomousHandoff
+          ? '自治交辦已正式建檔，等待 worker / reviewer / verifier 接手。'
+          : (shouldDispatchViaWorkflow ? '等待正式 workflow 接手與推進。' : '直接進 execution mode 處理。'),
+        summary: autonomousHandoff
+          ? '已接手自治交辦，這題會持續追到收斂。'
+          : (shouldDispatchViaWorkflow ? '任務已入 workflow 佇列。' : '任務已開始執行。'),
+        nextCheckpoint: shouldGateBeforeStart
+          ? '等待人工 gate'
+          : (shouldDispatchViaWorkflow ? '等待第一輪 dispatch / reviewer / verifier 啟動' : taskSeed.nextStep),
+        delegation: {
+          currentStatus: shouldGateBeforeStart
+            ? 'waiting_human_gate'
+            : (shouldDispatchViaWorkflow ? 'queued' : 'running'),
+          researchLoop: body.researchLoop || body.delegationPlan?.researchLoop || null,
+          operatorMode: body.operatorMode || body.delegationPlan?.operatorMode || null,
+          autonomyPolicy: body.autonomyPolicy || body.delegationPlan?.autonomyPolicy || null,
+          outputContract: body.outputContract || body.delegationPlan?.outputContract || null,
+          scope: body.scope || body.delegationPlan?.scope || null,
+          downstreamMatrix: body.downstreamMatrix || body.delegationPlan?.downstreamMatrix || null,
+          nextHandoff: shouldGateBeforeStart
+            ? '等待老闆決策'
+            : (shouldDispatchViaWorkflow ? '等待正式 worker / reviewer / verifier 接手' : '持續執行直到完成'),
+          notes: sanitizeTextValue(body.routingReason || body.reason || ''),
+        },
+        updatedBy: 'workflow-start-flow',
+      }
+
+      task = updateTask(task.id, {
+        lastUpdate: Date.now(),
+        ...buildTaskMemoryPatchFromBody(task, body, memorySeed, Date.now()),
+      }) || getTaskById(task.id) || task
 
       // Sync request state from task
       syncRequestStateFromTask(task)
@@ -2534,7 +3113,16 @@ export async function POST(request) {
       const feedback = normalizeCompletionFeedback({ success, body, task, taskTimeMs })
       const completionResult = result || (success ? 'Completed' : 'Failed')
       const shouldChaseRootCause = needsRootCauseFollowup({ success, body, task })
-      const shouldContinue = (success && needsContinuationFromText(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)) || shouldChaseRootCause
+      const shouldAutoDelegateResearch = success && isResearchOperatorTask(task, body)
+      const hasResearchConsultantStop = (
+        success
+        && isResearchOperatorTask(task, body)
+        && hasConsultantStopSignal(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)
+      )
+      const shouldContinue = (
+        success
+        && needsContinuationFromText(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)
+      ) || shouldChaseRootCause || shouldAutoDelegateResearch || hasResearchConsultantStop
       const completionAgent = effectiveAgent || task.assignedAgent || 'wickedman'
       const completionMemoryFallback = shouldChaseRootCause
         ? {
@@ -2551,6 +3139,25 @@ export async function POST(request) {
               currentStatus: 'awaiting-continuation',
               nextHandoff: body?.nextStep || '請先回報根因，再決定是否重跑或改道',
               notes: '系統判定上一輪失敗後仍需追根究底。',
+              suggestedSubagents: body?.suggestedSubagents || body?.delegation?.suggestedSubagents,
+            },
+            updatedBy: completionAgent,
+          }
+        : hasResearchConsultantStop
+        ? {
+            mode: 'execution',
+            focus: '研究魚不得停在顧問式收尾，請把研究壓成 control-plane artifact 並直接續跑',
+            summary: body?.summary || '研究魚回報仍帶有顧問式停問訊號，系統要求改成正式 control-plane 輸出。',
+            nextCheckpoint: body?.nextCheckpoint || body?.nextStep || '補上 decision brief / handoff brief / policy artifact，並直接派工或驗證',
+            blockers: [],
+            openLoops: body?.openLoops || ['把研究結論壓成可交辦 artifact 並直接續跑'],
+            evidence: body?.evidence || [completionResult],
+            rootCause: body?.rootCause || task?.rootCause || null,
+            evolutionNote: body?.evolutionNote || '研究魚若再次出現 consultant 式停問，應補強 prompt、session hygiene 與 control-plane artifact 規範。',
+            delegation: {
+              currentStatus: 'awaiting-continuation',
+              nextHandoff: body?.nextStep || '直接建立 downstream task / verifier 或治理 artifact',
+              notes: '系統攔截到 consultant stop signal，要求 research-fish 續跑到 control-plane 輸出。',
               suggestedSubagents: body?.suggestedSubagents || body?.delegation?.suggestedSubagents,
             },
             updatedBy: completionAgent,
@@ -2633,6 +3240,9 @@ export async function POST(request) {
         now: completedAt,
         persistRule: !shouldContinue,
       }) || getTaskById(task.id)
+      const delegatedTask = shouldAutoDelegateResearch
+        ? await dispatchResearchFollowupTasks(updatedTask || task, body, completedAt)
+        : (updatedTask || task)
       if (!shouldContinue) {
         closeChildTasksForParent(updatedTask || task, {
           status: success ? 'completed' : 'failed',
@@ -2642,7 +3252,7 @@ export async function POST(request) {
         })
       }
       emitTaskUpdate(task.id)
-      notifyTaskMilestone(updatedTask, shouldContinue ? 'continued' : (success ? 'completed' : 'failed'))
+      notifyTaskMilestone(delegatedTask || updatedTask, shouldContinue ? 'continued' : (success ? 'completed' : 'failed'))
       writeCompletionFeedbackToAttention({
         taskId: task.id,
         requestId: task.requestId,
@@ -2694,9 +3304,7 @@ export async function POST(request) {
       }
 
       if (shouldContinue) {
-        void executePendingAction(updatedTask || getTaskById(task.id), completedAt).catch((error) => {
-          console.error('[workflow] immediate continuation dispatch failed:', error?.message || error)
-        })
+        await runPendingAction(delegatedTask || getTaskById(task.id), completedAt, 'immediate continuation dispatch')
       }
 
       return Response.json({ success: true, requestId: task.requestId, taskId: task.id, savings, taskTimeMs })
@@ -2746,7 +3354,16 @@ export async function POST(request) {
       const completionResult = result || (success ? 'Completed' : 'Failed')
       const effectiveAgent = agent || task.assignedAgent || 'wickedman'
       const shouldChaseRootCause = needsRootCauseFollowup({ success, body, task })
-      const shouldContinue = (success && needsContinuationFromText(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)) || shouldChaseRootCause
+      const shouldAutoDelegateResearch = success && isResearchOperatorTask(task, body)
+      const hasResearchConsultantStop = (
+        success
+        && isResearchOperatorTask(task, body)
+        && hasConsultantStopSignal(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)
+      )
+      const shouldContinue = (
+        success
+        && needsContinuationFromText(`${completionResult}\n${body?.summary || ''}\n${body?.nextStep || ''}`)
+      ) || shouldChaseRootCause || shouldAutoDelegateResearch || hasResearchConsultantStop
       const completionMemoryFallback = shouldChaseRootCause
         ? {
             mode: 'execution',
@@ -2765,6 +3382,24 @@ export async function POST(request) {
               suggestedSubagents: body?.suggestedSubagents || body?.delegation?.suggestedSubagents,
             },
             updatedBy: effectiveAgent,
+          }
+        : hasResearchConsultantStop
+        ? {
+            mode: 'execution',
+            focus: '研究 follow-up 不得停在顧問式建議，請直接壓成 control-plane artifact 並續跑',
+            summary: body?.summary || 'research delegated task 仍帶有顧問式停問訊號，系統要求繼續往可交付 artifact 推進。',
+            nextCheckpoint: body?.nextCheckpoint || body?.nextStep || '補上可交辦 artifact 並直接推進下一個 owner',
+            openLoops: body?.openLoops || ['把 delegated 研究結論壓成正式 artifact 並續跑'],
+            evidence: body?.evidence || [completionResult],
+            rootCause: body?.rootCause || task?.rootCause || null,
+            evolutionNote: body?.evolutionNote || 'delegated research 若再次出現 consultant stop signal，應補強 artifact contract。',
+            delegation: {
+              currentStatus: 'awaiting-continuation',
+              nextHandoff: body?.nextStep || '直接建立下一個 owner 的 task / verifier / policy artifact',
+              notes: '系統攔截到 consultant stop signal，要求 delegated research 續跑。',
+              suggestedSubagents: body?.suggestedSubagents || body?.delegation?.suggestedSubagents,
+            },
+            updatedBy: effectiveAgent || 'workflow-api',
           }
         : shouldContinue
         ? {
@@ -2843,6 +3478,9 @@ export async function POST(request) {
         now: completedAt,
         persistRule: !shouldContinue,
       }) || getTaskById(task.id)
+      const delegatedTask = shouldAutoDelegateResearch
+        ? await dispatchResearchFollowupTasks(updatedTask || task, body, completedAt)
+        : (updatedTask || task)
       if (!shouldContinue) {
         closeChildTasksForParent(updatedTask || task, {
           status: success ? 'completed' : 'failed',
@@ -2852,7 +3490,7 @@ export async function POST(request) {
         })
       }
       emitTaskUpdate(task.id)
-      notifyTaskMilestone(updatedTask, shouldContinue ? 'continued' : (success ? 'completed' : 'failed'))
+      notifyTaskMilestone(delegatedTask || updatedTask, shouldContinue ? 'continued' : (success ? 'completed' : 'failed'))
       writeCompletionFeedbackToAttention({
         taskId: task.id,
         requestId: task.requestId,
@@ -2874,9 +3512,7 @@ export async function POST(request) {
       createEvent(task.requestId, 'completed', effectiveAgent, `${emoji} ${agentName} completed: "${(task.title || '').slice(0, 50)}"`)
 
       if (shouldContinue) {
-        void executePendingAction(updatedTask || getTaskById(task.id), completedAt).catch((error) => {
-          console.error('[workflow] immediate delegated continuation dispatch failed:', error?.message || error)
-        })
+        await runPendingAction(delegatedTask || getTaskById(task.id), completedAt, 'immediate delegated continuation dispatch')
       }
 
       return Response.json({ success: true, requestId: task.requestId, taskId: task.id, savings, taskTimeMs })
@@ -2953,8 +3589,7 @@ export async function POST(request) {
         attentionType: attentionMeta.attentionType,
         needsDecision: attentionMeta.needsDecision,
       })
-      const task = createTask({
-        requestId,
+      const task = ensurePrimaryTask(requestId, {
         title: taskSeed.title,
         detail: taskSeed.detail,
         assignedAgent: taskSeed.assignedAgent,
@@ -3390,9 +4025,7 @@ export async function POST(request) {
         createdAt: Date.now(),
       }
       // Create real task
-      const task = createTask({
-        id: taskData.id,
-        requestId,
+      const task = ensurePrimaryTask(requestId, {
         title: taskData.title,
         detail: taskData.detail,
         assignedAgent: analysis.agent,
@@ -3415,11 +4048,33 @@ export async function POST(request) {
         }),
         ...attentionMeta,
       })
-      updateRequest(requestId, { state: 'task_created', task: taskData, ...attentionMeta })
+      updateRequest(requestId, {
+        state: 'task_created',
+        task: {
+          id: task.id,
+          title: task.title,
+          detail: task.detail,
+          targetAgent: analysis.agent,
+          reason: analysis.reason,
+        },
+        ...attentionMeta,
+      })
       emitRequestUpdate(requestId)
       emitTaskUpdate(task.id)
       createEvent(req.id, 'task_created', 'wickedman', `📋 Task created → ${AGENTS[analysis.agent]?.name || analysis.agent}: ${analysis.reason}`)
-      return Response.json({ success: true, request: getRequestById(requestId), task: taskData, nextState: 'assigned', stateConfig: STATE_CONFIG.task_created })
+      return Response.json({
+        success: true,
+        request: getRequestById(requestId),
+        task: {
+          id: task.id,
+          title: task.title,
+          detail: task.detail,
+          targetAgent: analysis.agent,
+          reason: analysis.reason,
+        },
+        nextState: 'assigned',
+        stateConfig: STATE_CONFIG.task_created,
+      })
     }
 
     if (action === 'assign') {
@@ -3484,6 +4139,34 @@ export async function POST(request) {
       return Response.json({ success: true, request: getRequestById(requestId), agent: req.assignedTo, stateConfig: STATE_CONFIG.in_progress })
     }
 
+    if (action === 'kick_pending_action') {
+      const { requestId, taskId } = body
+      const task = taskId ? getTaskById(taskId) : (requestId ? getTaskByRequestId(requestId) : null)
+      if (!task) {
+        return Response.json({ error: 'Task not found' }, { status: 404 })
+      }
+
+      if (!task.pendingAction) {
+        return Response.json({
+          success: true,
+          requestId: task.requestId,
+          taskId: task.id,
+          kicked: false,
+          reason: 'no-pending-action',
+        })
+      }
+
+      const updatedTask = await executePendingAction(task, Date.now())
+      return Response.json({
+        success: true,
+        requestId: updatedTask?.requestId || task.requestId,
+        taskId: updatedTask?.id || task.id,
+        kicked: true,
+        pendingAction: updatedTask?.pendingAction || null,
+        status: updatedTask?.status || task.status,
+      })
+    }
+
     // ─────────────────────────────────────────────────────────
     // Debug/repair actions (unchanged)
     // ─────────────────────────────────────────────────────────
@@ -3506,3 +4189,4 @@ export async function POST(request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
 }
+
