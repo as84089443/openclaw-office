@@ -63,6 +63,8 @@ function timeStr() {
 }
 
 function createEvent(requestId, state, agent, message, extra = {}) {
+  if (requestId && !getRequestById(requestId)) return null
+
   const event = {
     id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     requestId,
@@ -78,6 +80,18 @@ function createEvent(requestId, state, agent, message, extra = {}) {
   addEvent(event)
   eventBus.emit(EVENTS.WORKFLOW_EVENT, event)
   return event
+}
+
+const WORKFLOW_SYNC_MODE = process.env.OPENCLAW_WORKFLOW_SYNC === '1'
+
+async function runPendingAction(task, now, logLabel) {
+  if (!task) return null
+  if (isTestLikeRuntime()) return task
+  if (WORKFLOW_SYNC_MODE) return executePendingAction(task, now)
+  void executePendingAction(task, now).catch((error) => {
+    console.error(`[workflow] ${logLabel} failed:`, error?.message || error)
+  })
+  return task
 }
 
 function isPrimaryTask(task) {
@@ -390,11 +404,23 @@ async function dispatchSidecarReviewers(task, { reason = 'continuation-review', 
   if (!task?.id) return task
   if (!isPrimaryTask(task)) return task
 
+  // 防重複派送守護：若此 task 的 sidecarDispatches 已有任何 completed/failed（含 auto-closed）記錄
+  // 代表 reviewer 已嘗試過，無論結果如何都不再重派，避免無限循環
+  const pastDispatches = (task.delegationPlan?.sidecarDispatches || [])
+  const alreadyAttempted = pastDispatches.some(
+    (d) => d.status === 'completed' || d.status === 'failed'
+  )
+  if (alreadyAttempted) {
+    console.log(`[dispatchSidecarReviewers] skip re-dispatch for ${task.id}: alreadyAttempted=true (${pastDispatches.length} past dispatches)`)
+    return task
+  }
+
   const delegation = normalizeDelegationPlan(task?.delegationPlan || {}, task, now)
   if (delegation.allowSubagents === false) return task
 
   const sidecarAgents = pickSidecarAgents(task, { reason, now })
   if (sidecarAgents.length === 0) return task
+
 
   const existingChildren = getChildTasks(task.id, 100)
   const sidecarDispatches = []
@@ -713,7 +739,7 @@ async function handleSidecarCompletion(task, { agent, result, success = true, bo
     now: completedAt,
     persistRule: shouldPersistRule,
   }) || currentParentSnapshot
-  if (shouldWakePrimary && updatedTask) {
+  if (shouldWakePrimary && updatedTask && !isTestLikeRuntime()) {
     void executePendingAction(updatedTask, completedAt).catch((error) => {
       console.error('[workflow] sidecar continuation dispatch failed:', error?.message || error)
     })
@@ -722,9 +748,29 @@ async function handleSidecarCompletion(task, { agent, result, success = true, bo
   return updatedTask
 }
 
+function buildTestRuntimeDispatch(task, { continuation = false, now = Date.now() } = {}) {
+  const sessionKey = buildTaskSessionKey(task)
+  const runId = `test-dispatch-${task?.id || crypto.randomUUID()}-${continuation ? 'continue' : 'start'}`
+  return {
+    accepted: {
+      ok: true,
+      testRuntime: true,
+      runId,
+      sessionKey,
+    },
+    runId,
+    sessionKey,
+    dispatchedAt: now,
+  }
+}
+
 async function dispatchTaskToAgent(task, { continuation = false, now = Date.now() } = {}) {
   if (!task?.assignedAgent) {
     throw new Error(`Task ${task?.id || 'unknown'} has no assigned agent`)
+  }
+
+  if (isTestLikeRuntime()) {
+    return buildTestRuntimeDispatch(task, { continuation, now })
   }
 
   if (isGstackBrowseAgent(task.assignedAgent)) {
@@ -762,6 +808,8 @@ async function executePendingAction(task, now = Date.now()) {
   if (!isPrimaryTask(task)) return null
 
   let governedTask = refreshPrimaryTaskIntelligence(task.id, { now }) || task
+  if (!governedTask?.id) return null
+  if (governedTask.requestId && !getRequestById(governedTask.requestId)) return null
 
   if (governedTask.pendingAction === 'start_work') {
     if (normalizeRiskTier(governedTask.riskTier) === 'irreversible') {
@@ -935,8 +983,14 @@ async function executePendingAction(task, now = Date.now()) {
     }
 
     const consensus = governedTask.consensus || buildTaskConsensus(governedTask)
+    // 若 sidecarDispatches 中已有任何 completed 紀錄（包含 auto-closed），視為 reviewer coverage 已滿足
+    // 避免：auto-close sidecar → executePendingAction → needsReviewerCoverage → 重派 sidecar → 無限循環
+    const alreadyHadSidecarAttempt = (governedTask.delegationPlan?.sidecarDispatches || []).some(
+      (d) => d.status === 'completed' || d.status === 'failed'
+    )
     const needsReviewerCoverage = ['medium', 'high', 'irreversible'].includes(normalizeRiskTier(governedTask.riskTier))
       && Number(governedTask.reviewerResults?.length || 0) === 0
+      && !alreadyHadSidecarAttempt
 
     if (needsReviewerCoverage) {
       let blockedTask = await ensureReviewerCoverage(governedTask, { reason: 'continuation-review', now })
@@ -961,7 +1015,7 @@ async function executePendingAction(task, now = Date.now()) {
       return blockedTask
     }
 
-    if (consensus.requiresThirdReviewer || consensus.status === 'needs_more_review') {
+    if (!alreadyHadSidecarAttempt && (consensus.requiresThirdReviewer || consensus.status === 'needs_more_review')) {
       let blockedTask = await dispatchSidecarReviewers(governedTask, { reason: 'root-cause', now })
       blockedTask = await dispatchGstackVerifier(blockedTask || governedTask, { reason: 'root-cause', now })
       blockedTask = updateTask((blockedTask || governedTask).id, {
@@ -1124,9 +1178,13 @@ const CONTINUATION_CHECK_MS = 45 * 1000
 const COMPLETION_GATE_CHECK_MS = 2 * 60 * 1000
 const SIDECAR_REDISPATCH_WINDOW_MS = 10 * 60 * 1000
 
-if (!globalThis.__officeStaleTaskMonitorStarted) {
+function isTestLikeRuntime() {
+  return process.env.NODE_ENV === 'test' || process.env.OPENCLAW_OFFICE_DISABLE_BACKGROUND_CONTINUATIONS === '1'
+}
+
+if (!globalThis.__officeStaleTaskMonitorStarted && !isTestLikeRuntime()) {
   globalThis.__officeStaleTaskMonitorStarted = true
-  setInterval(async () => {
+  const staleTaskMonitor = setInterval(async () => {
     try {
       const now = Date.now()
       const tasks = getActiveTasks(100)
@@ -1174,6 +1232,7 @@ if (!globalThis.__officeStaleTaskMonitorStarted) {
       console.error('[workflow] stale task monitor failed:', error.message)
     }
   }, STALE_TASK_SCAN_INTERVAL_MS)
+  staleTaskMonitor.unref?.()
 }
 
 // Keep request.state in sync with task.status for backward compatibility
@@ -2036,10 +2095,20 @@ function isAutoGeneratedHumanGateReason(reason = '') {
 
 function getActiveReviewerChildren(task = null) {
   if (!task?.id) return []
-  return getChildTasks(task.id, 100).filter((child) => (
-    ['sidecar_review', 'verifier'].includes(String(child.taskType || ''))
-    && !['completed', 'failed'].includes(String(child.status || '').toLowerCase())
-  ))
+  const SIDECAR_TIMEOUT_MS = 30 * 60 * 1000 // 30 分鐘超時
+  const now = Date.now()
+  return getChildTasks(task.id, 100).filter((child) => {
+    const statusStr = String(child.status || '').toLowerCase()
+    // 排除已完成或失敗
+    if (['completed', 'failed'].includes(statusStr)) return false
+    // 排除 auto-closed 標記（summary 或 milestone 含 [auto-closed]）
+    const summaryStr = String(child.summary || '') + String(child.milestone || '')
+    if (summaryStr.includes('[auto-closed]')) return false
+    // 排除超過 30 分鐘仍未完成的殭屍 sidecar
+    const createdMs = child.createdAt ? new Date(child.createdAt).getTime() : 0
+    if (createdMs > 0 && (now - createdMs) > SIDECAR_TIMEOUT_MS) return false
+    return ['sidecar_review', 'verifier'].includes(String(child.taskType || ''))
+  })
 }
 
 function buildTaskConsensus(task = {}, incomingResults = []) {
@@ -2467,6 +2536,12 @@ async function ensureReviewerCoverage(task, { reason = 'continuation-review', no
   if (!task?.id || !isPrimaryTask(task)) return task
   const riskTier = normalizeRiskTier(task.riskTier || inferRiskTierFromTask(task))
   if (!['medium', 'high', 'irreversible'].includes(riskTier)) return task
+
+  // 若已有過 sidecar attempt（無論成功或 auto-closed），不再重派，避免無限循環
+  const alreadyHadSidecarAttempt = (task.delegationPlan?.sidecarDispatches || []).some(
+    (d) => d.status === 'completed' || d.status === 'failed'
+  )
+  if (alreadyHadSidecarAttempt) return task
 
   const reviewerCount = Array.isArray(task.reviewerResults) ? task.reviewerResults.length : 0
   const childTasks = getChildTasks(task.id, 100)
@@ -3229,9 +3304,7 @@ export async function POST(request) {
       }
 
       if (shouldContinue) {
-        void executePendingAction(delegatedTask || getTaskById(task.id), completedAt).catch((error) => {
-          console.error('[workflow] immediate continuation dispatch failed:', error?.message || error)
-        })
+        await runPendingAction(delegatedTask || getTaskById(task.id), completedAt, 'immediate continuation dispatch')
       }
 
       return Response.json({ success: true, requestId: task.requestId, taskId: task.id, savings, taskTimeMs })
@@ -3439,9 +3512,7 @@ export async function POST(request) {
       createEvent(task.requestId, 'completed', effectiveAgent, `${emoji} ${agentName} completed: "${(task.title || '').slice(0, 50)}"`)
 
       if (shouldContinue) {
-        void executePendingAction(delegatedTask || getTaskById(task.id), completedAt).catch((error) => {
-          console.error('[workflow] immediate delegated continuation dispatch failed:', error?.message || error)
-        })
+        await runPendingAction(delegatedTask || getTaskById(task.id), completedAt, 'immediate delegated continuation dispatch')
       }
 
       return Response.json({ success: true, requestId: task.requestId, taskId: task.id, savings, taskTimeMs })
@@ -4118,3 +4189,4 @@ export async function POST(request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
 }
+

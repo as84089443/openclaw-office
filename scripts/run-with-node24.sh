@@ -24,6 +24,24 @@ export PATH="$(dirname "$NODE_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/b
 
 cd "$PROJECT_ROOT"
 
+if [ "$1" = "exec" ]; then
+  shift
+  if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
+    shift
+  fi
+  if [ "$#" -eq 0 ]; then
+    echo "[openclaw-office] exec 需要提供命令" >&2
+    exit 1
+  fi
+
+  if [ "$1" = "node" ]; then
+    shift
+    exec "$NODE_BIN" "$@"
+  fi
+
+  exec env PATH="$(dirname "$NODE_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:$PATH" "$@"
+fi
+
 if [ -f "$PREFERRED_NPM_CLI" ] && [ "$NODE_BIN" = "$PREFERRED_NODE_BIN" ]; then
   exec "$NODE_BIN" "$PREFERRED_NPM_CLI" "$@"
 fi

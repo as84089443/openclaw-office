@@ -1,0 +1,508 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "BW BW Copilot 入口分流後台" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: BW
+        - generic [ref=e6]:
+          - generic [ref=e7]: BW Copilot
+          - generic [ref=e8]: 入口分流後台
+      - generic [ref=e9]:
+        - link "首頁" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+          - text: 首頁
+        - link "營運" [ref=e14] [cursor=pointer]:
+          - /url: /ops
+          - img [ref=e15]
+          - text: 營運
+        - link "老闆" [ref=e18] [cursor=pointer]:
+          - /url: /office
+          - img [ref=e19]
+          - text: 老闆
+        - link "策劃" [ref=e23] [cursor=pointer]:
+          - /url: /studio
+          - img [ref=e24]
+          - text: 策劃
+        - link "瀏覽器" [ref=e26] [cursor=pointer]:
+          - /url: /browser
+          - img [ref=e27]
+          - text: 瀏覽器
+        - link "研究" [ref=e30] [cursor=pointer]:
+          - /url: /research
+          - img [ref=e31]
+          - text: 研究
+      - generic [ref=e33]: 目前：研究控制台
+  - main [ref=e35]:
+    - generic [ref=e36]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - img [ref=e41]
+            - text: AutoResearch 控制台
+          - heading "看懂這輪正在改什麼， 以及數字到底代表什麼。" [level=1] [ref=e43]:
+            - text: 看懂這輪正在改什麼，
+            - generic [ref=e44]: 以及數字到底代表什麼。
+          - paragraph [ref=e45]: 這頁不是只把檔案搬上來，而是把研究狀態翻成一般人看得懂的語言。你可以直接看到目前在優化哪一塊、最新試了什麼、分數變好還是變差，以及這些數字對你代表什麼。
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e48]: 目前待命
+            - generic [ref=e50]:
+              - img [ref=e51]
+              - text: 每 5 秒更新
+          - generic [ref=e56]:
+            - generic [ref=e57]: 目前這輪標記
+            - generic [ref=e58]: 等待新的一輪
+            - generic [ref=e59]: 目前沒有新的訊號。
+            - generic [ref=e60]: "更新時間: 讀取中"
+      - generic [ref=e62]:
+        - generic [ref=e63]:
+          - generic [ref=e64]: 現在主跑
+          - generic [ref=e65]: 程式進化：OpenClaw 魚群 Agents
+          - generic [ref=e66]: 請先找出這個系統最值得做成可持續進化能力的一個 bottleneck，直接改碼、驗證效果，並整理下一輪可延續的進化方向。
+        - generic [ref=e67]:
+          - generic [ref=e68]: 目前鎖定 bottleneck
+          - generic [ref=e69]: 正在判斷這輪最值得延續的 bottleneck
+          - generic [ref=e70]: 目的是先把「OpenClaw 魚群 Agents」最有複利的一個卡點修成下一輪更容易延續的能力。
+          - generic [ref=e71]: 目前動作：目前沒有新的訊號。
+        - generic [ref=e72]:
+          - generic [ref=e73]: 研究目標工作區
+          - generic [ref=e74]: OpenClaw 魚群 Agents
+          - generic [ref=e75]: /Users/brian/.openclaw
+        - generic [ref=e76]:
+          - generic [ref=e77]: 這輪最新進化
+          - generic [ref=e78]: 這輪會先鎖定一個最值得延續的進化瓶頸，再小範圍改碼
+          - generic [ref=e79]: 完成後會輸出：改到哪些檔案、怎麼驗證，以及下一輪最值得延續的方向。
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - generic [ref=e83]:
+              - img [ref=e84]
+              - text: 手動控制
+            - generic [ref=e87]: 尚未啟動
+          - generic [ref=e88]: 這裡可以手動啟動一輪 AutoResearch，或在跑到一半時要求停止。
+          - generic [ref=e89]:
+            - generic [ref=e90]:
+              - generic [ref=e91]: 這輪在試什麼
+              - generic [ref=e92]: 正在進化「OpenClaw 魚群 Agents」
+            - generic [ref=e93]:
+              - generic [ref=e94]: 這輪目標
+              - generic [ref=e95]: 這輪會圍繞「請先找出這個系統最值得做成可持續進化能力的一個 bottleneck，直接改碼、驗證效果，並整理下一輪可延續的進化方向。」先找一個最值得延續的進化瓶頸，實際改碼並跑驗證。
+            - generic [ref=e96]:
+              - generic [ref=e97]: 接下來
+              - generic [ref=e98]: 完成後會交出：鎖定的進化瓶頸、實際改動、驗證結果，以及下一輪最值得延續的 3 條進化方向。
+              - generic [ref=e99]: 目前進化目標是 /Users/brian/.openclaw
+          - generic [ref=e100]:
+            - generic [ref=e101]: 這輪要怎麼研究
+            - generic [ref=e102]: 想看懂程式就用「程式研究」；想真的改碼、驗證，就用「程式改善」；想留下可持續延續的高槓桿變化，就用「程式進化」。
+            - generic [ref=e103]:
+              - button "模型優化 適合 train.py / val_bpb / 訓練參數這類型的研究。" [ref=e104] [cursor=pointer]:
+                - generic [ref=e105]: 模型優化
+                - generic [ref=e106]: 適合 train.py / val_bpb / 訓練參數這類型的研究。
+              - button "程式研究 先讀懂你指定的程式，整理它在做什麼、關鍵檔案、流程與下一步。" [ref=e107] [cursor=pointer]:
+                - generic [ref=e108]: 程式研究
+                - generic [ref=e109]: 先讀懂你指定的程式，整理它在做什麼、關鍵檔案、流程與下一步。
+              - button "程式改善 直接找一個最值得先修的問題，改程式並跑驗證。" [ref=e110] [cursor=pointer]:
+                - generic [ref=e111]: 程式改善
+                - generic [ref=e112]: 直接找一個最值得先修的問題，改程式並跑驗證。
+              - button "程式進化 直接推進一個最值得延續的進化瓶頸，改程式、驗證，並留下下一輪可複利延伸的方向。" [ref=e113] [cursor=pointer]:
+                - generic [ref=e114]: 程式進化
+                - generic [ref=e115]: 直接推進一個最值得延續的進化瓶頸，改程式、驗證，並留下下一輪可複利延伸的方向。
+          - generic [ref=e116]:
+            - button "開始優化" [ref=e117] [cursor=pointer]:
+              - img [ref=e118]
+              - text: 開始優化
+            - button "停止優化" [disabled] [ref=e120]:
+              - img [ref=e121]
+              - text: 停止優化
+          - generic [ref=e123]:
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - generic [ref=e126]: 這次手動啟動設定
+                - generic [ref=e127]: 手動研究現在也可以直接選到夜跑 8 小時規格。這裡是你這輪要採用的預設值。
+              - button "儲存手動設定" [disabled] [ref=e128]:
+                - img [ref=e129]
+                - text: 儲存手動設定
+            - generic [ref=e133]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: 建議停止時限
+                - generic [ref=e136]:
+                  - spinbutton "建議停止時限 分鐘" [ref=e137]: "120"
+                  - generic [ref=e138]: 分鐘
+              - generic [ref=e139]:
+                - generic [ref=e140]: 最晚強制停止
+                - generic [ref=e141]:
+                  - spinbutton "最晚強制停止 分鐘" [ref=e142]: "180"
+                  - generic [ref=e143]: 分鐘
+              - generic [ref=e144]:
+                - generic [ref=e145]: 實驗上限
+                - generic [ref=e146]:
+                  - spinbutton "實驗上限 次" [ref=e147]: "8"
+                  - generic [ref=e148]: 次
+            - generic [ref=e149]:
+              - generic [ref=e150]: 這輪想研究什麼
+              - textbox "這輪想研究什麼 你填的主題會直接送進 strategy planner 和 Codex prompt，讓這輪更偏向你指定的方向；留白則照系統自己的研究線安排。" [ref=e151]:
+                - /placeholder: 例如：我想優先研究 warmdown / final lr 的搭配，看看固定 5 分鐘預算下能不能再把 val_bpb 壓低。
+                - text: 請先找出這個系統最值得做成可持續進化能力的一個 bottleneck，直接改碼、驗證效果，並整理下一輪可延續的進化方向。
+              - generic [ref=e152]: 你填的主題會直接送進 strategy planner 和 Codex prompt，讓這輪更偏向你指定的方向；留白則照系統自己的研究線安排。
+            - generic [ref=e153]:
+              - button "超短驗證 45 分鐘 / 最晚 60 分鐘 / 3 次實驗" [ref=e154] [cursor=pointer]:
+                - generic [ref=e155]: 超短驗證
+                - generic [ref=e156]: 45 分鐘 / 最晚 60 分鐘 / 3 次實驗
+              - button "快速測一下 60 分鐘 / 最晚 90 分鐘 / 4 次實驗" [ref=e157] [cursor=pointer]:
+                - generic [ref=e158]: 快速測一下
+                - generic [ref=e159]: 60 分鐘 / 最晚 90 分鐘 / 4 次實驗
+              - button "平衡模式 90 分鐘 / 最晚 120 分鐘 / 6 次實驗" [ref=e160] [cursor=pointer]:
+                - generic [ref=e161]: 平衡模式
+                - generic [ref=e162]: 90 分鐘 / 最晚 120 分鐘 / 6 次實驗
+              - button "深挖一輪 120 分鐘 / 最晚 150 分鐘 / 8 次實驗" [ref=e163] [cursor=pointer]:
+                - generic [ref=e164]: 深挖一輪
+                - generic [ref=e165]: 120 分鐘 / 最晚 150 分鐘 / 8 次實驗
+              - button "半天研究 180 分鐘 / 最晚 240 分鐘 / 12 次實驗" [ref=e166] [cursor=pointer]:
+                - generic [ref=e167]: 半天研究
+                - generic [ref=e168]: 180 分鐘 / 最晚 240 分鐘 / 12 次實驗
+              - button "長時深挖 240 分鐘 / 最晚 300 分鐘 / 16 次實驗" [ref=e169] [cursor=pointer]:
+                - generic [ref=e170]: 長時深挖
+                - generic [ref=e171]: 240 分鐘 / 最晚 300 分鐘 / 16 次實驗
+              - button "馬拉松研究 360 分鐘 / 最晚 420 分鐘 / 20 次實驗" [ref=e172] [cursor=pointer]:
+                - generic [ref=e173]: 馬拉松研究
+                - generic [ref=e174]: 360 分鐘 / 最晚 420 分鐘 / 20 次實驗
+              - button "夜跑規格 480 分鐘 / 最晚 510 分鐘 / 24 次實驗" [ref=e175] [cursor=pointer]:
+                - generic [ref=e176]: 夜跑規格
+                - generic [ref=e177]: 480 分鐘 / 最晚 510 分鐘 / 24 次實驗
+            - generic [ref=e178]: 下一次手動啟動會使用：建議停止 120 分鐘 / 最晚強制停止 180 分鐘 / 最多 8 次實驗。
+          - generic [ref=e179]:
+            - generic [ref=e180]:
+              - generic [ref=e181]: 這輪時間進度
+              - generic [ref=e182]: 尚未啟動
+            - generic [ref=e185]: 上面第一條是建議收尾進度，第二條才是最晚強制停止的硬上限。
+            - generic [ref=e186]:
+              - generic [ref=e187]:
+                - generic [ref=e188]: 目前執行標記
+                - generic [ref=e189]: 尚未啟動手動研究批次
+              - generic [ref=e190]:
+                - generic [ref=e191]: 已跑時間
+                - generic [ref=e192]: 0 分鐘
+              - generic [ref=e193]:
+                - generic [ref=e194]: 建議收尾
+                - generic [ref=e195]: 待下一輪開始
+              - generic [ref=e196]:
+                - generic [ref=e197]: 最晚截止
+                - generic [ref=e198]: 待下一輪開始
+              - generic [ref=e199]:
+                - generic [ref=e200]: 研究 / 改善 / 進化上限
+                - generic [ref=e201]: 待下一輪開始
+            - generic [ref=e202]: 目前這輪實際使用的是：建議停止 待更新 / 最晚強制停止 待更新 / 最多嘗試 待更新 個進化步驟。
+            - generic [ref=e203]: 控制紀錄檔：會在下一輪啟動後產生
+        - generic [ref=e204]:
+          - generic [ref=e205]:
+            - img [ref=e206]
+            - text: 研究看板
+          - generic [ref=e218]:
+            - generic [ref=e219]:
+              - generic [ref=e220]: 你指定的研究主題
+              - generic [ref=e221]: 請先找出這個系統最值得做成可持續進化能力的一個 bottleneck，直接改碼、驗證效果，並整理下一輪可延續的進化方向。
+            - generic [ref=e222]:
+              - generic [ref=e223]: 現在這輪在進化什麼
+              - generic [ref=e224]: 這輪還沒寫入研究線目標。
+              - generic [ref=e225]: 等待策略器補上這輪的說明。
+            - generic [ref=e226]:
+              - generic [ref=e227]: 這輪會留下什麼
+              - generic [ref=e228]:
+                - generic [ref=e229]: 進化對象：OpenClaw 魚群 Agents
+                - generic [ref=e230]: 會留下：進化瓶頸、改動檔案、驗證結果、下一輪可延續方向
+                - generic [ref=e231]: 下一輪建議：待規劃
+            - generic [ref=e232]:
+              - generic [ref=e233]: 數字怎麼看
+              - generic [ref=e234]:
+                - generic [ref=e235]: 進化瓶頸：這輪先挑哪個最值得持續延續的 bottleneck。
+                - generic [ref=e236]: 改動檔案數：這輪真的動到幾個檔案，不是只講願景。
+                - generic [ref=e237]: 驗證狀態：代表 build / test / 操作驗證到底有沒有過。
+                - generic [ref=e238]: 下一輪可延續方向：代表這次進化後，最值得沿著哪條線繼續推進。
+      - generic [ref=e239]:
+        - generic [ref=e241]:
+          - generic [ref=e242]:
+            - generic [ref=e243]: 進化模式
+            - generic [ref=e244]: 程式進化
+            - generic [ref=e245]: 這輪會先鎖定一個最值得持續進化的 bottleneck，實際改程式並跑驗證。
+          - img [ref=e247]
+        - generic [ref=e260]:
+          - generic [ref=e261]:
+            - generic [ref=e262]: 進化目標
+            - generic [ref=e263]: OpenClaw 魚群 Agents
+            - generic [ref=e264]: /Users/brian/.openclaw
+          - img [ref=e266]
+        - generic [ref=e271]:
+          - generic [ref=e272]:
+            - generic [ref=e273]: 改動檔案數
+            - generic [ref=e274]: "0"
+            - generic [ref=e275]: 這輪會把進化改動集中在少數高槓桿檔案。
+          - img [ref=e277]
+        - generic [ref=e280]:
+          - generic [ref=e281]:
+            - generic [ref=e282]: 驗證狀態
+            - generic [ref=e283]: 待更新
+            - generic [ref=e284]: 完成後會顯示這輪驗證是否通過。
+          - img [ref=e286]
+        - generic [ref=e290]:
+          - generic [ref=e291]:
+            - generic [ref=e292]: 下一輪
+            - generic [ref=e293]: 待規劃
+            - generic [ref=e294]: 會沿著這次進化結果，挑下一個最值得延續的高槓桿瓶頸。
+          - img [ref=e296]
+      - generic [ref=e299]:
+        - generic [ref=e300]:
+          - generic [ref=e301]:
+            - img [ref=e302]
+            - text: 程式進化紀錄
+          - generic [ref=e304]: 這裡會直接告訴你：這輪先推進哪個進化瓶頸、實際改了哪些檔案、做了哪些驗證，以及下一輪還能怎麼沿著這個方向繼續演化。
+          - generic [ref=e305]:
+            - generic [ref=e306]:
+              - generic [ref=e307]: 這輪鎖定的進化瓶頸
+              - generic [ref=e308]: 這輪還沒把進化瓶頸摘要寫出來，等摘要收尾後會顯示在這裡。
+            - generic [ref=e309]:
+              - generic [ref=e310]:
+                - generic [ref=e311]: 這次實際進化了哪些檔案
+                - generic [ref=e313]: 這輪還沒寫出改動清單，完成後會把實際動到的檔案列在這裡。
+              - generic [ref=e314]:
+                - generic [ref=e315]: 這次怎麼驗證
+                - generic [ref=e317]: 這輪還沒寫出驗證內容，完成後會列出實際跑過的驗證指令與結果。
+            - generic [ref=e318]:
+              - generic [ref=e319]: 進化後下一輪最值得延續什麼
+              - generic [ref=e321]: 這輪還沒整理出下一輪進化建議，收尾後會顯示在這裡。
+        - generic [ref=e322]:
+          - generic [ref=e323]:
+            - generic [ref=e324]:
+              - img [ref=e325]
+              - text: 模型策略
+            - generic [ref=e337]:
+              - generic [ref=e338]:
+                - generic [ref=e339]: 主力模型
+                - combobox "主力模型 這個模型會作為預設研究模型。" [ref=e340]:
+                  - option "()" [selected]
+                  - option "()"
+                - generic [ref=e341]: 這個模型會作為預設研究模型。
+              - generic [ref=e342]:
+                - generic [ref=e343]: 突破模型
+                - combobox "突破模型 當主力模式連續停滯時，會切到這個模型。" [ref=e344]:
+                  - option "()" [selected]
+                  - option "()"
+                - generic [ref=e345]: 當主力模式連續停滯時，會切到這個模型。
+              - generic [ref=e346]: 這輪是程式類模式，主力模型會負責看懂系統或提出改動；突破模型主要保留給模型優化夜跑與較難的卡關局。
+              - generic [ref=e347]:
+                - generic [ref=e348]: 目前研究線：待規劃
+                - generic [ref=e349]: 這輪還沒寫入研究線目標。
+                - generic [ref=e350]: 下一輪開始前，策略器會依研究記憶與停滯次數重新挑選。
+                - generic [ref=e351]: 先看：待補
+                - generic [ref=e352]: 先避開：待補
+                - generic [ref=e353]: 若停滯就切到：待規劃
+              - generic [ref=e354]: 這裡改的是之後要用的模型策略。正在跑的這一輪不會中途切換，會從下一輪手動啟動或固定排程開始生效。
+              - button "儲存模型策略" [disabled] [ref=e355]:
+                - img [ref=e356]
+                - text: 儲存模型策略
+          - generic [ref=e360]:
+            - generic [ref=e361]:
+              - img [ref=e362]
+              - text: 研究邊界與工作區
+            - generic [ref=e366]:
+              - generic [ref=e367]: 目前分支：待更新
+              - generic [ref=e368]: 目前提交：待更新
+              - generic [ref=e369]: 目前模式：程式進化
+              - generic [ref=e370]: 目前研究工作區：OpenClaw 魚群 Agents
+              - generic [ref=e371]: 工作區路徑：/Users/brian/.openclaw
+              - generic [ref=e372]: Codex 登入：尚未確認
+              - generic [ref=e373]: proxy-chatgpt：尚未確認
+              - generic [ref=e374]: 這輪做法：先鎖定單一進化瓶頸，再小範圍改碼與驗證
+              - generic [ref=e375]: 改動檔案數：0
+              - generic [ref=e376]: 驗證項目數：0
+              - generic [ref=e377]: 這輪不是唯讀分析，而是會在指定工作區內實際修改程式、驗證結果，並把下一輪可持續延續的做法一起留下來。
+      - generic [ref=e378]:
+        - generic [ref=e379]:
+          - generic [ref=e380]:
+            - generic [ref=e383]: 開發魚
+            - generic [ref=e384]: 待命中
+          - generic [ref=e385]: 目前沒有新的訊號。
+          - generic [ref=e386]: 下一步：等待下一步
+        - generic [ref=e387]:
+          - generic [ref=e388]:
+            - generic [ref=e391]: QA 檢查
+            - generic [ref=e392]: 待命中
+          - generic [ref=e393]: 目前沒有新的訊號。
+          - generic [ref=e394]: 下一步：等待下一步
+        - generic [ref=e395]:
+          - generic [ref=e396]:
+            - generic [ref=e399]: 記憶整理
+            - generic [ref=e400]: 待命中
+          - generic [ref=e401]: 目前沒有新的訊號。
+          - generic [ref=e402]: 下一步：等待下一步
+      - generic [ref=e403]:
+        - generic [ref=e404]:
+          - generic [ref=e405]:
+            - img [ref=e406]
+            - text: 執行過程
+          - generic [ref=e410]: 目前還沒有可顯示的執行紀錄。
+        - generic [ref=e411]:
+          - generic [ref=e412]:
+            - generic [ref=e414]: 進化摘要
+            - generic [ref=e415]: /Users/brian/.openclaw/artifacts/manual/summary.md
+            - generic [ref=e416]: 這一區會顯示完整檔案內容，方便直接看研究結論。
+            - generic [ref=e417]: 尚未產生內容。
+          - generic [ref=e418]:
+            - generic [ref=e420]: 後續確認
+            - generic [ref=e421]: /Users/brian/.openclaw/artifacts/manual/revalidation.md
+            - generic [ref=e422]: 這一區會顯示完整檔案內容，方便直接看研究結論。
+            - generic [ref=e423]: 尚未產生內容。
+          - generic [ref=e424]:
+            - generic [ref=e426]: QA 報告
+            - generic [ref=e427]: /Users/brian/.openclaw/artifacts/manual/qa-check.md
+            - generic [ref=e428]: 這一區會顯示完整檔案內容，方便直接看研究結論。
+            - generic [ref=e429]: 尚未產生內容。
+      - generic [ref=e430]:
+        - generic [ref=e431]:
+          - generic [ref=e433]: 記憶整理交接
+          - generic [ref=e434]: 尚未產生檔案
+          - generic [ref=e435]: 這一區會顯示完整檔案內容，方便直接看研究結論。
+          - generic [ref=e436]: 尚未產生內容。
+        - generic [ref=e437]:
+          - generic [ref=e438]:
+            - img [ref=e439]
+            - text: 執行紀錄尾端
+          - generic [ref=e442]: 尚未產生紀錄檔
+          - generic [ref=e443]:
+            - generic [ref=e444]:
+              - generic [ref=e445]: 開始時間
+              - generic [ref=e446]: 讀取中
+            - generic [ref=e447]:
+              - generic [ref=e448]: 執行命令
+              - generic [ref=e449]: 待更新
+          - generic [ref=e450]: 目前沒有新的執行紀錄。
+      - generic [ref=e451]:
+        - generic [ref=e452]:
+          - generic [ref=e453]: 這輪最值得看的內容
+          - generic [ref=e454]:
+            - paragraph [ref=e455]: 這輪鎖定的進化瓶頸：等摘要寫完後會顯示在這裡。
+            - paragraph [ref=e456]: 一句話摘要：待更新
+            - paragraph [ref=e457]: 驗證狀態：待更新
+            - paragraph [ref=e458]: 改動檔案數：0
+            - paragraph [ref=e459]: 下一輪進化建議會在收尾後整理到這裡。
+        - generic [ref=e460]:
+          - generic [ref=e461]: 研究記憶與資料來源
+          - generic [ref=e462]:
+            - generic [ref=e463]:
+              - generic [ref=e464]: 目前工作區：OpenClaw 魚群 Agents
+              - generic [ref=e465]: 工作區路徑：/Users/brian/.openclaw
+              - generic [ref=e466]: 這輪會把進化結果寫進摘要、QA、後續確認與記憶交接，讓下一輪可以沿著同一條高槓桿方向持續延續。
+            - generic [ref=e467]:
+              - generic [ref=e468]: 最近交付記憶
+              - generic [ref=e469]: 最近交付輪數：0
+              - generic [ref=e470]: 驗證通過率：待更新
+              - generic [ref=e471]: 最近更新：待更新
+              - generic [ref=e472]: 等第一輪程式改善或進化完成後，這裡會開始累積可延續的交付記憶。
+            - generic [ref=e473]:
+              - generic [ref=e474]: 目前建議延續的方向
+              - generic [ref=e476]: 還沒有累積到足夠穩定的通過方向。
+            - generic [ref=e477]:
+              - generic [ref=e478]: 目前先避開的方向
+              - generic [ref=e480]: 目前沒有累積到明確要先避開的重複卡點。
+              - generic [ref=e481]: 下一輪候選：待補
+            - generic [ref=e482]:
+              - generic [ref=e483]: 魚群 readiness 候選
+              - generic [ref=e484]: 這裡會把目前共享 status 裡最值得優先處理的 blocked / yellow 魚整理成下一輪候選，避免每次都要手動翻 status.json。
+              - generic [ref=e486]:
+                - generic [ref=e487]: . invoice
+                - generic [ref=e488]: 報價 20260315-004 的 invoice handoff 尚未 ready。
+                - generic [ref=e489]:
+                  - generic [ref=e490]: blocked
+                  - generic [ref=e491]: 缺客戶統編
+                  - generic [ref=e492]: invoice_missing_tax_id
+                - generic [ref=e493]: 先補齊報價 20260315-004 的客戶統編，更新 invoice intake 後再重跑 invoice handoff。
+            - generic [ref=e494]:
+              - generic [ref=e495]: 自動迭代證據
+              - generic [ref=e496]: 原始主題：請先找出這個系統最值得做成可持續進化能力的一個 bottleneck。
+              - generic [ref=e497]: 實際執行主題：請先找出這個系統最值得做成可持續進化能力的一個 bottleneck，直接改碼、驗證效果，並整理下一輪可延續的進化方向。
+              - generic [ref=e498]: 接續來源 run：manual-20260329-1130
+              - generic [ref=e499]: Codex thread：019d37c0-08fb-71b0-a969-78e8170c7442
+              - generic [ref=e500]: 目前輪次：14
+              - generic [ref=e501]: 已完成輪數：13
+              - generic [ref=e502]: 本輪上限：20
+              - generic [ref=e503]: 延續上一輪已浮出的 readiness 候選。
+              - generic [ref=e504]: 已載入最近交付記憶，避免重複踩到已知無效路線。
+              - generic [ref=e505]: 這輪起跑於 readiness persistence 上線前，已從目前共享 fleet readiness 候選回補當前鎖定的 blocker。
+              - generic [ref=e506]:
+                - generic [ref=e507]:
+                  - text: 本輪鎖定卡點：invoice
+                  - generic [ref=e508]: / 缺客戶統編
+                  - generic [ref=e509]: (invoice_missing_tax_id)
+                - generic [ref=e510]:
+                  - text: 訊號來源：live snapshot 即時回補
+                  - generic [ref=e511]: (live-fallback)
+                - generic [ref=e512]: 報價 20260315-004 的 invoice handoff 尚未 ready。
+                - generic [ref=e513]: 先補齊報價 20260315-004 的客戶統編，更新 invoice intake 後再重跑 invoice handoff。
+            - generic [ref=e514]:
+              - generic [ref=e515]: 主要資料來源
+              - generic [ref=e516]:
+                - generic [ref=e517]: /Users/brian/.openclaw/artifacts/manual/summary.md
+                - generic [ref=e518]: /Users/brian/.openclaw/artifacts/manual/qa-check.md
+                - generic [ref=e519]: /Users/brian/.openclaw/artifacts/manual/revalidation.md
+            - generic [ref=e520]:
+              - generic [ref=e521]: /Users/brian/.openclaw
+              - generic [ref=e523]: 尚未產生策略報告
+              - generic [ref=e524]: 尚未產生研究記憶索引
+      - generic [ref=e525]:
+        - generic [ref=e526]:
+          - generic [ref=e527]:
+            - img [ref=e528]
+            - text: 正式排程
+          - generic [ref=e532]: 這一區放到底部，因為它是「之後怎麼跑」的設定，不是你打開頁面最先需要看的資訊。改完後會從下一次正式排程開始生效；目前正式排程仍以模型優化夜跑為主。
+          - generic [ref=e533]:
+            - generic [ref=e534]:
+              - generic [ref=e535]:
+                - generic [ref=e536]:
+                  - generic [ref=e537]: 夜間研究開始時間
+                  - generic [ref=e538]: 每天固定啟動 AutoResearch 的時間。
+                - button "排程已啟用" [ref=e539] [cursor=pointer]: 排程已啟用
+              - generic [ref=e542]:
+                - generic [ref=e543]: 時間設定
+                - textbox "時間設定 直接改成你要的時間，儲存後就會寫回正式排程。" [ref=e544]: 02:30
+                - generic [ref=e545]: 直接改成你要的時間，儲存後就會寫回正式排程。
+              - generic [ref=e546]:
+                - generic [ref=e547]:
+                  - generic [ref=e548]: 下次執行
+                  - generic [ref=e549]: 讀取中
+                - generic [ref=e550]:
+                  - generic [ref=e551]: 最近狀態
+                  - generic [ref=e552]: 尚未執行
+            - generic [ref=e553]:
+              - generic [ref=e554]:
+                - generic [ref=e555]:
+                  - generic [ref=e556]: 早晨檢查時間
+                  - generic [ref=e557]: 每天自動檢查夜跑是否正常完成的時間。
+                - button "排程已啟用" [ref=e558] [cursor=pointer]: 排程已啟用
+              - generic [ref=e561]:
+                - generic [ref=e562]: 時間設定
+                - textbox "時間設定 直接改成你要的時間，儲存後就會寫回正式排程。" [ref=e563]: 10:45
+                - generic [ref=e564]: 直接改成你要的時間，儲存後就會寫回正式排程。
+              - generic [ref=e565]:
+                - generic [ref=e566]:
+                  - generic [ref=e567]: 下次執行
+                  - generic [ref=e568]: 讀取中
+                - generic [ref=e569]:
+                  - generic [ref=e570]: 最近狀態
+                  - generic [ref=e571]: 尚未執行
+            - button "儲存排程變更" [disabled] [ref=e572]:
+              - img [ref=e573]
+              - text: 儲存排程變更
+        - generic [ref=e577]:
+          - generic [ref=e578]: 排程解讀
+          - generic [ref=e579]:
+            - paragraph [ref=e580]: 夜間研究：正式啟動一整輪 AutoResearch，會跑研究、複驗、QA 與記憶整理。
+            - paragraph [ref=e581]: 早晨檢查：不是再跑研究，而是確認昨晚那輪有沒有正常完成，必要時留告警。
+            - paragraph [ref=e582]: 正在跑的研究 不會因為你改時間而中斷；新的設定只影響下一次排程。
+            - generic [ref=e583]:
+              - text: 下次夜間研究：讀取中
+              - text: 下次早晨檢查：讀取中
+  - alert [ref=e584]
+```

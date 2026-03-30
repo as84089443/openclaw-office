@@ -210,6 +210,28 @@ else
   exit 1
 fi
 
+HOST_OFFICE_PORT="$(python3 - "$SOURCE_OFFICE_CONFIG" <<'PY'
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, 'r', encoding='utf-8') as handle:
+        payload = json.load(handle)
+    print(int(payload.get('deployment', {}).get('port') or payload.get('port') or 4201))
+except Exception:
+    print(4201)
+PY
+)"
+
+if [ "$HOST_OFFICE_PORT" = "4201" ] && command -v launchctl >/dev/null 2>&1; then
+  OFFICE_UID="$(id -u)"
+  OFFICE_LABEL="gui/${OFFICE_UID}/ai.openclaw.office"
+  if launchctl print "$OFFICE_LABEL" >/dev/null 2>&1; then
+    log "refresh host office runtime for public entry (port 4201)"
+    run_quiet_command "host-office-build" npm run build
+    launchctl kickstart -k "$OFFICE_LABEL" || true
+  fi
+fi
+
 log "wait for local health"
 for i in $(seq 1 "${DELAY_SECONDS}"); do
   if curl -fsS "$LOCAL_HEALTH_URL" >/dev/null; then

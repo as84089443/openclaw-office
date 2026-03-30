@@ -62,6 +62,10 @@ export async function POST(request) {
         softMinutes: body?.softMinutes,
         hardMinutes: body?.hardMinutes,
         maxExperiments: body?.maxExperiments,
+        researchKind: body?.researchKind,
+        researchTopic: body?.researchTopic,
+        targetPath: body?.targetPath,
+        targetLabel: body?.targetLabel,
       })
       return Response.json(result)
     }

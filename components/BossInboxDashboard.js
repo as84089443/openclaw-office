@@ -58,6 +58,13 @@ const WORKFLOW_PHASE_LABEL = {
   superseded: '已被取代',
 }
 
+const RESEARCH_OPERATOR_PHASE_LABEL = {
+  running_research: '研究中',
+  delegating: '派工中',
+  verifying: '驗證中',
+  waiting_human_gate: '等老闆拍板',
+}
+
 const REVIEW_STATUS_LABEL = {
   pending: '待確認',
   approved: '已同意',
@@ -365,10 +372,63 @@ function LobsterMetricCard({ label, value, Icon, tone = 'cyan' }) {
   )
 }
 
+function LobsterTrackSection({
+  eyebrow,
+  title,
+  description,
+  tracks,
+  emptyText,
+  collapsible = false,
+  defaultOpen = false,
+}) {
+  if (!tracks || tracks.length === 0) return null
+
+  const body = (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">{eyebrow}</div>
+          <div className="mt-2 text-lg text-white">{title}</div>
+          <div className="mt-1 max-w-3xl text-sm leading-7 text-gray-400">{description}</div>
+        </div>
+        <div className="text-xs text-gray-500">{tracks.length} 題</div>
+      </div>
+      <div className="space-y-3">
+        {tracks.map((track) => <LobsterTrackCard key={track.id} track={track} />)}
+      </div>
+    </div>
+  )
+
+  if (!collapsible) return body
+
+  return (
+    <details className="rounded-2xl border border-white/8 bg-black/10 p-4" open={defaultOpen}>
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">{eyebrow}</div>
+            <div className="mt-2 text-lg text-white">{title}</div>
+            <div className="mt-1 max-w-3xl text-sm leading-7 text-gray-400">{description}</div>
+          </div>
+          <div className="text-xs text-gray-500">{tracks.length} 題</div>
+        </div>
+      </summary>
+      <div className="mt-4 space-y-3">
+        {tracks.length === 0 ? (
+          <div className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm text-gray-400">
+            {emptyText}
+          </div>
+        ) : tracks.map((track) => <LobsterTrackCard key={track.id} track={track} />)}
+      </div>
+    </details>
+  )
+}
+
 function LobsterTrackCard({ track }) {
   const blockerLine = (track.blockers || []).filter(Boolean).join(' / ')
   const openLoopLine = (track.openLoops || []).filter(Boolean).join(' / ')
   const suggestedSubagents = (track.suggestedSubagents || []).filter(Boolean)
+  const delegatedAgents = (track.delegatedAgents || []).filter(Boolean)
   const childTasks = track.childTasks || []
   const consensus = track.consensus || null
   const reusableRule = track.reusableRule || null
@@ -384,6 +444,7 @@ function LobsterTrackCard({ track }) {
       || (track.workflowPhase === 'failed' && track.status === 'failed')
     ),
   )
+  const showResearchOperatorPhase = Boolean(track.researchOperatorPhase)
   return (
     <div className={`rounded-2xl border p-4 ${track.staleMemory ? 'border-amber-500/20 bg-amber-500/5' : 'border-white/8 bg-black/20'}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -392,6 +453,11 @@ function LobsterTrackCard({ track }) {
             <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-cyan-200">
               {track.agentEmoji} {track.agentName}
             </span>
+            {track.originLabel && (
+              <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-emerald-200">
+                {track.originLabel}
+              </span>
+            )}
             <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-gray-300">
               {formatBrainMode(track.brainMode)}
             </span>
@@ -401,6 +467,11 @@ function LobsterTrackCard({ track }) {
             {showWorkflowPhase && (
               <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-100">
                 {formatStatusLabel(track.workflowPhase, WORKFLOW_PHASE_LABEL, track.workflowPhase)}
+              </span>
+            )}
+            {showResearchOperatorPhase && (
+              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-cyan-100">
+                {formatStatusLabel(track.researchOperatorPhase, RESEARCH_OPERATOR_PHASE_LABEL, track.researchOperatorPhase)}
               </span>
             )}
             <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-gray-300">
@@ -418,6 +489,11 @@ function LobsterTrackCard({ track }) {
             )}
           </div>
           <div className="mt-3 font-display text-lg text-white">{track.title}</div>
+          {(track.requestFrom || track.originDescription) && (
+            <div className="mt-2 text-xs leading-6 text-gray-500">
+              來源: {track.requestFrom || '系統'}{track.originDescription ? ` / ${track.originDescription}` : ''}
+            </div>
+          )}
           {track.summary && (
             <div className="mt-2 text-sm leading-7 text-gray-300">{track.summary}</div>
           )}
@@ -441,6 +517,10 @@ function LobsterTrackCard({ track }) {
           <div className="mt-2 text-sm text-gray-200">{track.milestone || '—'}</div>
         </div>
         <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">下一個自動步驟</div>
+          <div className="mt-2 text-sm text-gray-200">{track.nextAutoStep || track.nextHandoff || track.nextStep || '—'}</div>
+        </div>
+        <div className="rounded-xl border border-white/6 bg-white/3 px-4 py-3">
           <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">委派狀態</div>
           <div className="mt-2 text-sm text-gray-200">
             {formatDelegationStatus(track.delegationStatus)}
@@ -462,7 +542,7 @@ function LobsterTrackCard({ track }) {
         </div>
       </div>
 
-      {(track.rootCause || blockerLine || openLoopLine || track.nextHandoff || suggestedSubagents.length > 0 || sidecarDispatchLine || track.evolutionNote || track.humanGateReason || consensus?.recommendedAction || reusableRule) && (
+      {(track.rootCause || blockerLine || openLoopLine || track.nextHandoff || track.nextAutoStep || suggestedSubagents.length > 0 || delegatedAgents.length > 0 || sidecarDispatchLine || track.evolutionNote || track.humanGateReason || consensus?.recommendedAction || reusableRule) && (
         <div className="mt-4 space-y-2 text-sm leading-7">
           {track.humanGateReason && (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-100">
@@ -481,12 +561,24 @@ function LobsterTrackCard({ track }) {
           )}
           {openLoopLine && (
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
-              <span className="mr-2 text-cyan-300">Open Loops</span>{openLoopLine}
+              <span className="mr-2 text-cyan-300">Open Loops</span>
+              {track.openLoopCount ? `${track.openLoopCount} 項 / ` : ''}
+              {openLoopLine}
+            </div>
+          )}
+          {delegatedAgents.length > 0 && (
+            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-cyan-100">
+              <span className="mr-2 text-cyan-300">已派給</span>{delegatedAgents.join(' / ')}
             </div>
           )}
           {track.nextHandoff && (
             <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
               <span className="mr-2 text-cyan-300">下一交接點</span>{track.nextHandoff}
+            </div>
+          )}
+          {track.nextAutoStep && (
+            <div className="rounded-xl border border-white/6 bg-black/20 px-4 py-3 text-gray-300">
+              <span className="mr-2 text-cyan-300">下一個自動步驟</span>{track.nextAutoStep}
             </div>
           )}
           {suggestedSubagents.length > 0 && (
@@ -622,6 +714,9 @@ function LobsterTrackCard({ track }) {
 function LobsterBrainPanel({ lobsterBrain }) {
   if (!lobsterBrain) return null
   const tracks = lobsterBrain.trackedTasks || []
+  const directIngressTracks = lobsterBrain.directIngressTracks || []
+  const manualRequestTracks = lobsterBrain.manualRequestTracks || []
+  const backgroundTracks = lobsterBrain.backgroundTracks || []
   const reusableRules = lobsterBrain.reusableRules || []
   return (
     <div className="glass-card rounded-2xl p-6">
@@ -630,27 +725,29 @@ function LobsterBrainPanel({ lobsterBrain }) {
           <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">龍蝦大腦</div>
           <div className="mt-2 font-display text-2xl text-white">正式記憶與追蹤面板</div>
           <div className="mt-3 max-w-3xl text-sm leading-7 text-gray-400">
-            這裡看的是任務腦內狀態，不只是流程狀態。包含目標、焦點、根因、委派狀態、續跑佇列與演化備註。
+            先把你直接交辦的題目放最前面，再把手動 / API 與背景自治任務分開。你不用再從一堆內部 smoke、維運或系統跟進題裡猜哪幾張才是你的。
           </div>
         </div>
         <div className="text-xs text-gray-500">
-          追蹤中 {lobsterBrain.activeTaskCount || 0} 題 / 已補根因 {lobsterBrain.rootedCount || 0} 題 / 已補演化 {lobsterBrain.evolvingCount || 0} 題
+          直接交辦 {lobsterBrain.directIngressTaskCount || 0} 題 / 手動 API {lobsterBrain.manualRequestTaskCount || 0} 題 / 背景自治 {lobsterBrain.backgroundTaskCount || 0} 題
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <LobsterMetricCard label="活躍任務" value={lobsterBrain.activeTaskCount || 0} Icon={BrainCircuit} tone="cyan" />
+        <LobsterMetricCard label="你的交辦" value={lobsterBrain.directIngressTaskCount || 0} Icon={BrainCircuit} tone="cyan" />
+        <LobsterMetricCard label="手動 / API" value={lobsterBrain.manualRequestTaskCount || 0} Icon={RefreshCw} tone="amber" hideWhenZero />
+        <LobsterMetricCard label="背景自治" value={lobsterBrain.backgroundTaskCount || 0} Icon={Bot} tone="rose" hideWhenZero />
         <LobsterMetricCard label="圖譜節點" value={lobsterBrain.taskGraphNodeCount || 0} Icon={GitBranchPlus} tone="cyan" />
         <LobsterMetricCard label="活躍子任務" value={lobsterBrain.activeChildTaskCount || 0} Icon={RefreshCw} tone="cyan" />
-        <LobsterMetricCard label="續跑佇列" value={lobsterBrain.continuationQueueCount || 0} Icon={Orbit} tone="amber" />
-        <LobsterMetricCard label="委派中" value={lobsterBrain.delegatedRunCount || 0} Icon={Bot} tone="cyan" />
-        <LobsterMetricCard label="sidecar reviewer" value={lobsterBrain.sidecarDispatchCount || 0} Icon={RefreshCw} tone="cyan" />
-        <LobsterMetricCard label="已補根因" value={lobsterBrain.rootedCount || 0} Icon={Bug} tone="rose" />
-        <LobsterMetricCard label="有演化備註" value={lobsterBrain.evolvingCount || 0} Icon={Sparkles} tone="emerald" />
-        <LobsterMetricCard label="記憶過舊" value={lobsterBrain.staleMemoryCount || 0} Icon={GitBranchPlus} tone="amber" />
-        <LobsterMetricCard label="人工 Gate" value={lobsterBrain.humanGateCount || 0} Icon={ShieldAlert} tone="amber" />
-        <LobsterMetricCard label="共識阻擋" value={lobsterBrain.blockedConsensusCount || 0} Icon={AlertTriangle} tone="rose" />
-        <LobsterMetricCard label="Reusable Rule" value={lobsterBrain.reusableRuleCount || 0} Icon={Sparkles} tone="emerald" />
+        <LobsterMetricCard label="續跑佇列" value={lobsterBrain.continuationQueueCount || 0} Icon={Orbit} tone="amber" hideWhenZero />
+        <LobsterMetricCard label="委派中" value={lobsterBrain.delegatedRunCount || 0} Icon={Bot} tone="cyan" hideWhenZero />
+        <LobsterMetricCard label="sidecar reviewer" value={lobsterBrain.sidecarDispatchCount || 0} Icon={RefreshCw} tone="cyan" hideWhenZero />
+        <LobsterMetricCard label="已補根因" value={lobsterBrain.rootedCount || 0} Icon={Bug} tone="rose" hideWhenZero />
+        <LobsterMetricCard label="有演化備註" value={lobsterBrain.evolvingCount || 0} Icon={Sparkles} tone="emerald" hideWhenZero />
+        <LobsterMetricCard label="記憶過舊" value={lobsterBrain.staleMemoryCount || 0} Icon={GitBranchPlus} tone="amber" hideWhenZero />
+        <LobsterMetricCard label="人工 Gate" value={lobsterBrain.humanGateCount || 0} Icon={ShieldAlert} tone="amber" hideWhenZero />
+        <LobsterMetricCard label="共識阻擋" value={lobsterBrain.blockedConsensusCount || 0} Icon={AlertTriangle} tone="rose" hideWhenZero />
+        <LobsterMetricCard label="Reusable Rule" value={lobsterBrain.reusableRuleCount || 0} Icon={Sparkles} tone="emerald" hideWhenZero />
       </div>
 
       <div className="mt-5 space-y-3">
@@ -659,7 +756,35 @@ function LobsterBrainPanel({ lobsterBrain }) {
             目前沒有活躍中的龍蝦記憶追蹤任務。
           </div>
         ) : (
-          tracks.map((track) => <LobsterTrackCard key={track.id} track={track} />)
+          <>
+            {directIngressTracks.length === 0 && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
+                目前沒有來自 Discord / TG 的直接交辦；下面看到的會是手動 / API 任務或背景自治流程。
+              </div>
+            )}
+            <LobsterTrackSection
+              eyebrow="你的正式交辦"
+              title="只看你從 Discord / TG 直接丟進來的題目"
+              description="這一區才是你最近真的交辦給魚群的任務。"
+              tracks={directIngressTracks}
+            />
+            <LobsterTrackSection
+              eyebrow="手動 / API 交辦"
+              title="透過 Office 或 API 建立的任務"
+              description="這些不是背景自治，但也不是從 Discord / TG 直接進來。先收在第二層，避免和你當下的正式交辦混在一起。"
+              tracks={manualRequestTracks}
+              emptyText="目前沒有手動 / API 交辦。"
+              collapsible
+            />
+            <LobsterTrackSection
+              eyebrow="背景自治 / 維運"
+              title="系統內部驗證、Boss Inbox 跟進與背景流程"
+              description="這些是系統自己跑的 smoke、維運、attention follow-up，不是你剛剛直接交辦的題目。"
+              tracks={backgroundTracks}
+              emptyText="目前沒有背景自治任務。"
+              collapsible
+            />
+          </>
         )}
       </div>
 
@@ -1510,6 +1635,32 @@ export default function BossInboxDashboard({ mode = 'full' }) {
     return list
   }, [activeAgents, agentRank])
   const focusAgents = orderedActiveAgents.filter((agent) => agent.layer === 'focus')
+  const spotlightAgentIds = useMemo(() => new Set(['research-fish']), [])
+  const visibleAgents = useMemo(() => {
+    const base = showAllFish ? orderedActiveAgents : focusAgents
+    const registry = new Map(base.map((agent) => [agent.id, agent]))
+
+    for (const agentId of spotlightAgentIds) {
+      const candidate = allAgents.find((agent) => agent.id === agentId)
+      if (candidate) registry.set(agentId, candidate)
+    }
+
+    return [...registry.values()].sort((a, b) => {
+      const aSpotlight = spotlightAgentIds.has(a.id) ? 0 : 1
+      const bSpotlight = spotlightAgentIds.has(b.id) ? 0 : 1
+      if (aSpotlight !== bSpotlight) return aSpotlight - bSpotlight
+
+      const aRank = agentRank[a.id] ?? Number.MAX_SAFE_INTEGER
+      const bRank = agentRank[b.id] ?? Number.MAX_SAFE_INTEGER
+      if (aRank !== bRank) return aRank - bRank
+
+      const aActive = a.activityState === 'active' ? 0 : 1
+      const bActive = b.activityState === 'active' ? 0 : 1
+      if (aActive !== bActive) return aActive - bActive
+
+      return a.name.localeCompare(b.name, 'zh-Hant')
+    })
+  }, [showAllFish, orderedActiveAgents, focusAgents, spotlightAgentIds, allAgents, agentRank])
   const growthSignals = payload?.growthSignals || []
   const candidatePatches = payload?.candidatePatches || []
   const governanceSummary = payload?.governanceSummary || null
@@ -2175,7 +2326,7 @@ export default function BossInboxDashboard({ mode = 'full' }) {
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {(showAllFish ? orderedActiveAgents : focusAgents).map((agent) => (
+          {visibleAgents.map((agent) => (
             <AgentCard key={agent.id} agent={agent} />
           ))}
         </div>

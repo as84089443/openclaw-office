@@ -39,6 +39,14 @@ const primaryEntries = [
     tag: '決策',
   },
   {
+    href: '/dialogueflow',
+    title: '多人對話助手',
+    hint: '會前、會中、會後 AI 協作',
+    accent: '#00d1ff',
+    icon: MessageCircleMore,
+    tag: '對話',
+  },
+  {
     href: '/studio',
     title: '內容策劃中台',
     hint: '內容庫、腳本、Sora',
@@ -70,13 +78,6 @@ const utilityEntries = [
     accent: '#ff6b35',
     icon: FlaskConical,
   },
-  {
-    href: 'https://dialogueflow.bw-space.com',
-    title: '對話助手',
-    accent: '#00d1ff',
-    icon: MessageCircleMore,
-    external: true,
-  },
 ]
 
 const environmentEntries = [
@@ -100,6 +101,7 @@ function PrimaryEntryCard({ entry }) {
   return (
     <Link
       href={entry.href}
+      prefetch={false}
       className="group relative overflow-hidden rounded-[28px] border px-4 py-5 transition hover:-translate-y-1"
       style={{
         borderColor: `${entry.accent}30`,

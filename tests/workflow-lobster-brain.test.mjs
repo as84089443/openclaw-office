@@ -34,6 +34,7 @@ writeFileSync(join(tempRoot, 'openclaw.json'), JSON.stringify(openclawConfig, nu
 process.env.OPENCLAW_HOME = tempRoot
 process.env.OPENCLAW_CONFIG_PATH = join(tempRoot, 'openclaw.json')
 process.env.OPENCLAW_OFFICE_DB_PATH = join(officeDataDir, 'office.db')
+process.env.OPENCLAW_WORKFLOW_SYNC = '1'
 process.env.OPENCLAW_OFFICE_CONFIG_JSON = JSON.stringify({
   bossInbox: {
     deliveryEnabled: false,
@@ -78,6 +79,21 @@ function makeWorkflowRequest(payload) {
 
 test.beforeEach(() => {
   resetDb()
+})
+
+test('createTask drops stale request links instead of tripping foreign keys during async continuation', () => {
+  const task = createTask({
+    requestId: 'req_missing_async',
+    title: 'stale async child',
+    detail: 'created after parent request disappeared',
+    assignedAgent: 'qa',
+    taskType: 'worker_subtask',
+    parentTaskId: 'task_parent_missing',
+    rootTaskId: 'task_root_missing',
+  })
+
+  assert.ok(task)
+  assert.equal(task.requestId, null)
 })
 
 test('start_flow stops irreversible work at a human gate', async () => {

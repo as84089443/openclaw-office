@@ -13,6 +13,21 @@
     "url": "ws://127.0.0.1:18789",
     "token": "your-gateway-token-here"
   },
+  "channelPolicies": {
+    "discord": {
+      "guilds": {
+        "974685838157971466": {
+          "channels": {
+            "1487803123790643341": {
+              "mode": "autonomous_operator",
+              "chatEscapePrefix": "先聊:",
+              "defaultDelivery": "workflow_only"
+            }
+          }
+        }
+      }
+    }
+  },
   "agents": {
     "main": {
       "name": "Main",

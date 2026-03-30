@@ -57,7 +57,7 @@
     "test:boss-inbox": "sh scripts/run-with-node24.sh exec -- node --test tests/boss-inbox.test.mjs",
     "test:office-auth": "sh scripts/run-with-node24.sh exec -- node --test tests/office-auth.test.mjs",
     "test:evolution": "sh scripts/run-with-node24.sh exec -- node --test tests/evolution-loop.test.mjs",
-    "test:workflow": "sh scripts/run-with-node24.sh exec -- node --test tests/workflow-lobster-brain.test.mjs",
+    "test:workflow": "NODE_ENV=test sh scripts/run-with-node24.sh exec -- node --test tests/workflow-lobster-brain.test.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
     "test:e2e:report": "npx playwright show-report"

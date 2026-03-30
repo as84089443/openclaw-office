@@ -4,7 +4,7 @@ protocol: http2
 
 ingress:
   - hostname: copilot.bw-space.com
-    service: http://localhost:4201
+    service: http://127.0.0.1:4201
   - hostname: bws.fun
     service: http://localhost:3000
   - hostname: webhook.bw-space.com
