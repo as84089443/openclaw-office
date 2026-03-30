@@ -230,6 +230,10 @@ async function notifyTaskMilestone(task, status) {
     message = `⏰ <b>任務久未更新</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
   } else if (status === 'continued') {
     message = `🔁 <b>任務續跑</b>\n• ${agentName}\n• ${escapeHtml(summary)}`
+  } else if (status === 'blocked' || status === 'human_gate') {
+    const reason = task.humanGateReason || task.blockerReason || '已達決策點'
+    const shortReason = reason.length > 80 ? `${reason.slice(0, 77)}...` : reason
+    message = `🛑 <b>需要你決定</b>\n• ${agentName}\n• ${escapeHtml(summary)}\n• ${escapeHtml(shortReason)}\n\n→ 到看板放行或給指示：https://copilot.bw-space.com/office/openclaw`
   }
 
   if (message) {
@@ -969,6 +973,7 @@ async function executePendingAction(task, now = Date.now()) {
         { now, keepPendingAction: false },
       )
       emitTaskUpdate(governedTask.id)
+      notifyTaskMilestone(gated, 'blocked').catch(() => {})
       return gated
     }
 
@@ -979,6 +984,7 @@ async function executePendingAction(task, now = Date.now()) {
         { now, keepPendingAction: false },
       )
       emitTaskUpdate(governedTask.id)
+      notifyTaskMilestone(gated, 'blocked').catch(() => {})
       return gated
     }
 
@@ -1914,11 +1920,11 @@ function defaultRetryBudgetForRiskTier(riskTier) {
     case 'irreversible':
       return 0
     case 'high':
-      return 1
-    case 'medium':
       return 2
+    case 'medium':
+      return 4
     default:
-      return 3
+      return 6
   }
 }
 
