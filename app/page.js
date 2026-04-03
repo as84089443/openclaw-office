@@ -47,12 +47,12 @@ const primaryEntries = [
     tag: '對話',
   },
   {
-    href: '/studio',
-    title: '內容策劃中台',
-    hint: '內容庫、腳本、Sora',
-    accent: '#9d4edd',
+    href: '/content',
+    title: 'AI 內容製片廠',
+    hint: '趨勢分析、腳本、拍攝、審核、AI 影片、成效',
+    accent: '#00f0ff',
     icon: Sparkles,
-    tag: '內容',
+    tag: '短影音',
   },
   {
     href: '/writer',

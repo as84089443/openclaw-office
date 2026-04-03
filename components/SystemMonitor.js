@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 
 const REFRESH_INTERVAL_MS = 5000
+/** Abort slow tunnel/API hangs so the UI can show an error instead of endless spinners. */
+const STATS_FETCH_TIMEOUT_MS = 15000
 const GAUGE_RADIUS = 28
 const GAUGE_STROKE = 6
 const GAUGE_SIZE = 72
@@ -247,7 +249,10 @@ export default function SystemMonitor({ compact = false } = {}) {
       setRefreshing(true)
       setError('')
 
-      const response = await fetch('/api/office/system-stats', { cache: 'no-store' })
+      const response = await fetch('/api/office/system-stats', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(STATS_FETCH_TIMEOUT_MS),
+      })
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
@@ -261,7 +266,12 @@ export default function SystemMonitor({ compact = false } = {}) {
       setLoading(false)
     } catch (loadError) {
       console.error('Failed to load system stats:', loadError)
-      setError(loadError.message || '目前暫時讀不到系統效能資料。')
+      const isTimeout = loadError?.name === 'TimeoutError' || loadError?.name === 'AbortError'
+      setError(
+        isTimeout
+          ? '讀取逾時，請確認網路或稍後再試。'
+          : loadError.message || '目前暫時讀不到系統效能資料。',
+      )
       setLoading(false)
     } finally {
       setRefreshing(false)

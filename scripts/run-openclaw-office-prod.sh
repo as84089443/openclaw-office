@@ -19,6 +19,8 @@ fi
 
 export PATH="$(dirname "$NODE_BIN"):/Users/brian/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/Users/brian/.local/bin:/Users/brian/.npm-global/bin:$PATH"
 export NODE_ENV=production
+# 穩定優先：避免 gateway websocket 流量拖垮 Office HTTP 回應
+export OPENCLAW_OFFICE_DISABLE_GATEWAY="${OPENCLAW_OFFICE_DISABLE_GATEWAY:-1}"
 
 cd "$PROJECT_ROOT"
 
@@ -124,6 +126,6 @@ fi
 
 ensure_native_runtime
 ensure_build_runtime
-ensure_clawx_operator_ingress_patch
+ensure_clawx_operator_ingress_patch || echo "[openclaw-office] clawx patch skipped (ClawX.app not present)"
 
 exec "$NODE_BIN" start.js

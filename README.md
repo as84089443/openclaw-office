@@ -67,6 +67,7 @@ npm run test:e2e:report
 
 ## 重要環境變數
 
+- `CONTENTFORGE_ORIGIN`：Copilot 網域上 `/content`、`/login`、`/api/auth` 等 rewrite 的 ContentStudio 上游。未設定時預設 `https://contentstudio.bw-space.com`（請與目前 Vercel production 一致）。
 - `FNB_PUBLIC_BASE_URL`
 - `FNB_INTERNAL_API_TOKEN`
 - `OFFICE_ADMIN_TOKEN`（設了之後，Office 寫入 API 需要 `x-office-token` 或 `/api/office/session` cookie）

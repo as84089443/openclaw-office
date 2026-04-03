@@ -18,7 +18,11 @@ const nextConfig = {
     },
   ],
   rewrites: async () => {
-    const contentforgeOrigin = process.env.CONTENTFORGE_ORIGIN || 'https://contentforge-weld.vercel.app'
+    // Canonical ContentStudio production host (bw_contentstudio on Vercel). The old
+    // contentforge-weld.vercel.app default drifted from current deploys and caused
+    // copilot.bw-space.com rewrites (/content, /login, …) to hit a broken upstream.
+    const contentforgeOrigin =
+      process.env.CONTENTFORGE_ORIGIN || 'https://contentstudio.bw-space.com'
     return [
       // Public entry points mounted on copilot.bw-space.com
       { source: '/chat', destination: `${contentforgeOrigin}/chat` },
@@ -44,7 +48,10 @@ const nextConfig = {
       { source: '/brand/:path*', destination: `${contentforgeOrigin}/brand/:path*` },
       { source: '/manual', destination: `${contentforgeOrigin}/manual` },
       { source: '/manual/:path*', destination: `${contentforgeOrigin}/manual/:path*` },
+      { source: '/content', destination: `${contentforgeOrigin}/content` },
+      { source: '/content/:path*', destination: `${contentforgeOrigin}/content/:path*` },
       { source: '/api/auth/:path*', destination: `${contentforgeOrigin}/api/auth/:path*` },
+      { source: '/api/factory/:path*', destination: `${contentforgeOrigin}/api/factory/:path*` },
     ]
   },
 }

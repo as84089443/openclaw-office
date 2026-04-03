@@ -1190,6 +1190,7 @@ function isTestLikeRuntime() {
 
 if (!globalThis.__officeStaleTaskMonitorStarted && !isTestLikeRuntime()) {
   globalThis.__officeStaleTaskMonitorStarted = true
+  let lastStaleMonitorErrorAt = 0
   const staleTaskMonitor = setInterval(async () => {
     try {
       const now = Date.now()
@@ -1235,7 +1236,11 @@ if (!globalThis.__officeStaleTaskMonitorStarted && !isTestLikeRuntime()) {
         await notifyTaskMilestone(patched || freshTask, 'stale')
       }
     } catch (error) {
-      console.error('[workflow] stale task monitor failed:', error.message)
+      const now = Date.now()
+      if (now - lastStaleMonitorErrorAt > 60_000) {
+        lastStaleMonitorErrorAt = now
+        console.error('[workflow] stale task monitor failed:', error.message)
+      }
     }
   }, STALE_TASK_SCAN_INTERVAL_MS)
   staleTaskMonitor.unref?.()
